@@ -42,6 +42,12 @@ BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = Path(os.environ.get("LANTERNFLY_UPLOAD_DIR", BASE_DIR / "uploads"))
 SIGHTINGS_FILE = UPLOAD_DIR.parent / "sightings.jsonl"
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+AUTO_APPROVE_CONFIDENCE = 0.5   # model confidence needed to approve automatically
+STAGE_POINTS = {"Adult": 10, "Black nymph": 10, "Red nymph": 10, "Egg mass": 15}
+CORRECT_STAGE_BONUS = 5
+QUIZ_POINTS = 10
+LESSON_COUNT = 3
+
 ALLOWED_FORMATS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "HEIF": ".heif", "HEIC": ".heic", "MPO": ".jpg"}
 
 app = FastAPI(title="VT-Lanternfly API")
@@ -243,22 +249,65 @@ def _parse_timestamp(value: str | None) -> datetime | None:
         parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
     return parsed
 
+def _normalize_stage(label: str | None) -> str:
+    text = (label or "").lower()
+    if "egg" in text:
+        return "Egg mass"
+    if "red" in text:
+        return "Red nymph"
+    if "nymph" in text or "black" in text:
+        return "Black nymph"
+    return "Adult"
 
-def _save_report(record: dict, detection: dict, user_id: int | None, life_stage: str | None) -> int | None:
-    """Insert the upload into the MySQL reports table (review_status='pending').
+BADGE_RULES = {  # badge name -> minimum verified reports
+    "First Squash": 1, "Lanternfly Hunter": 10, "Pest Patrol": 25, "Campus Defender": 50,
+}
 
-    Runs alongside the JSONL index, not instead of it: if MySQL is down the
-    upload still succeeds and the map keeps working. Returns the report id,
-    or None if the database write failed.
-    """
+
+def _award_badges(db: Session, user_id: int) -> None:
+    """Give the user any badges they've newly earned. Call before db.commit()."""
+    db.flush()  # make reports/quiz passes added in this session visible to the queries below
+    approved = select(func.count(Report.id)).where(
+        Report.user_id == user_id, Report.review_status == "approved"
+    )
+    total = db.scalar(approved)
+    stages = set(db.scalars(
+        select(Report.life_stage_verified).distinct().where(
+            Report.user_id == user_id, Report.review_status == "approved"
+        )
+    ))
+    quizzes = db.scalar(select(func.count()).select_from(QuizPass).where(QuizPass.user_id == user_id))
+
+    earned = {name for name, needed in BADGE_RULES.items() if total >= needed}
+    if "Egg mass" in stages:
+        earned.add("Egg Hunter")
+    if stages & {"Black nymph", "Red nymph"}:
+        earned.add("Nymph Spotter")
+    if {"Egg mass", "Black nymph", "Red nymph", "Adult"} <= stages:
+        earned.add("Full Life Cycle")
+    if quizzes >= LESSON_COUNT:
+        earned.add("Field Expert")
+
+    already = set(db.scalars(select(UserBadge.badge_id).where(UserBadge.user_id == user_id)))
+    for badge in db.scalars(select(Badge).where(Badge.name.in_(earned))):
+        if badge.id not in already:
+            db.add(UserBadge(user_id=user_id, badge_id=badge.id))
+
+
+def _save_report(record: dict, detection: dict, user_id: int | None, life_stage: str | None) -> dict:
+    result = {"report_id": None, "review_status": "pending", "life_stage": None, "points_awarded": 0}
     detections = detection.get("detections") or []
     best = max(detections, key=lambda d: d.get("confidence", 0), default=None)
+    confident = (detection.get("status") == "detected" and best is not None
+                 and best.get("confidence", 0) >= AUTO_APPROVE_CONFIDENCE)
+    stage = _normalize_stage(best.get("label")) if best else None
     try:
         with SessionLocal() as db:
             existing = db.scalar(select(Report).where(Report.photo_hash == record["photo_id"]))
-            if existing is not None:  # same photo uploaded again
-                return existing.id
-            # still need to implement: take the user from a login token instead of trusting a form field.
+            if existing is not None:  # same photo again: no extra points
+                result.update(report_id=existing.id, review_status=existing.review_status,
+                              life_stage=existing.life_stage_verified)
+                return result
             if user_id is not None and db.get(User, user_id) is None:
                 user_id = None
             report = Report(
@@ -270,18 +319,40 @@ def _save_report(record: dict, detection: dict, user_id: int | None, life_stage:
                 captured_at=_parse_timestamp(record.get("timestamp")),
                 location_source=record.get("location_source"),
                 life_stage_claimed=life_stage,
+                life_stage_verified=stage if confident else None,
                 detection_status=detection.get("status"),
                 model_confidence=round(best["confidence"], 4) if best else None,
                 bbox=[d.get("bbox_xyxy") for d in detections] or None,
-                review_status="pending",
+                review_status="approved" if confident else "pending",
             )
             db.add(report)
+            db.flush()  # gives report.id
+            points = 0
+            if confident and user_id is not None:
+                points = STAGE_POINTS.get(stage, 10)
+                if life_stage and life_stage.strip().lower() == stage.lower():
+                    points += CORRECT_STAGE_BONUS
+                db.add(PointEvent(user_id=user_id, report_id=report.id, points=points,
+                                  reason=f"Verified report: {stage}"))
+                _award_badges(db, user_id)
             db.commit()
-            return report.id
+            result.update(report_id=report.id, review_status=report.review_status,
+                          life_stage=stage if confident else None, points_awarded=points)
+            return result
     except SQLAlchemyError:
         logger.exception("Could not save report to MySQL; kept in sightings.jsonl only")
-        return None
+        return result
 
+
+def _profile_by_id(user_id: int | None) -> dict | None:
+    if user_id is None:
+        return None
+    try:
+        with SessionLocal() as db:
+            user = db.get(User, user_id)
+            return _user_profile(db, user) if user else None
+    except SQLAlchemyError:
+        return None
 
 @app.post("/api/sightings", status_code=201)
 async def upload_sighting(
@@ -352,15 +423,18 @@ async def upload_sighting(
         except OSError:
             logger.exception("Failed to persist local sighting index")
             raise HTTPException(status_code=500, detail="Could not save sighting locally.")
-        report_id = await run_in_threadpool(_save_report, stored_record, detection, user_id, life_stage)
+        saved = await run_in_threadpool(_save_report, stored_record, detection, user_id, life_stage)
+        approved = saved["review_status"] == "approved"
         return {
-            "message": "Photo received; metadata extracted and AI detection attempted. "
-                       + ("Saved to the review queue." if report_id else "Indexed locally only (database unavailable)."),
-            "report_id": report_id,
+            "message": "Verified; points awarded." if approved else "Saved to the review queue.",
+            "report_id": saved["report_id"],
             "photo_id": digest.hexdigest(),
             "metadata": metadata,
             "detection": detection,
-            "verification_status": "pending_review",
+            "verification_status": "approved" if approved else "pending_review",
+            "life_stage": saved["life_stage"],
+            "points_awarded": saved["points_awarded"],
+            "user": await run_in_threadpool(_profile_by_id, user_id),
         }
     except HTTPException:
         if destination is not None:
@@ -372,6 +446,62 @@ async def upload_sighting(
         raise HTTPException(status_code=400, detail="Could not process image.") from exc
     finally:
         await photo.close()
+
+TEAM_GOAL_TARGET = 20
+@app.get("/api/team-goal")
+def team_goal(db: Session = Depends(get_db)):
+    found = db.scalar(
+        select(func.count(Report.id)).where(
+            Report.review_status == "approved",
+            Report.life_stage_verified == "Adult",
+            )
+    )
+    return {
+        "title": f"{TEAM_GOAL_TARGET} Adult lanternflies before December",
+        "target": TEAM_GOAL_TARGET,
+        "found": found,
+    }
+
+def _get_user_or_404(db: Session, user_id: int) -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@app.get("/api/users/{user_id}")
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    return _user_profile(db, _get_user_or_404(db, user_id))
+
+
+@app.post("/api/users/{user_id}/lessons/{lesson_index}/pass")
+def pass_lesson(user_id: int, lesson_index: int, db: Session = Depends(get_db)):
+    user = _get_user_or_404(db, user_id)
+    if not 0 <= lesson_index < LESSON_COUNT:
+        raise HTTPException(status_code=400, detail="Unknown lesson")
+    if db.get(QuizPass, (user_id, lesson_index)) is None:  # points only once
+        db.add(QuizPass(user_id=user_id, lesson_index=lesson_index))
+        db.add(PointEvent(user_id=user_id, lesson_id=lesson_index, points=QUIZ_POINTS,
+                          reason=f"Passed lesson {lesson_index + 1}"))
+        _award_badges(db, user_id)
+        db.commit()
+    return _user_profile(db, user)
+
+
+class SettingsUpdate(BaseModel):
+    anonymous: bool | None = None
+    shareWithResearchers: bool | None = None
+
+
+@app.patch("/api/users/{user_id}/settings")
+def update_settings(user_id: int, settings: SettingsUpdate, db: Session = Depends(get_db)):
+    user = _get_user_or_404(db, user_id)
+    if settings.anonymous is not None:
+        user.anonymous = settings.anonymous
+    if settings.shareWithResearchers is not None:
+        user.share_with_researchers = settings.shareWithResearchers
+    db.commit()
+    return _user_profile(db, user)
 
 
 from fastapi.responses import FileResponse

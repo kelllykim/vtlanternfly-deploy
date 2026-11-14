@@ -8,13 +8,15 @@ import ResultScreen from './screens/ResultScreen'
 import LearnScreen from './screens/LearnScreen'
 import TeamsScreen from './screens/TeamsScreen'
 import ProfileScreen from './screens/ProfileScreen'
-import WireframePrototype from './screens/WireframePrototype'
+//import WireframePrototype from './screens/WireframePrototype'
 import AuthScreen from './screens/AuthScreen'
 
-import type { UserProfile, LeaderboardEntry } from './types';
+import type { UserProfile, LeaderboardEntry } from './types'
+import { getTeamGoal, type TeamGoal } from './services/api'
+import { getUser, passLessonApi, updateSettings } from './services/api'
 
 export default function App() {
-  const [wireframe, setWireframe] = useState(false)
+  //const [wireframe, setWireframe] = useState(false)
   const [view, setView] = useState<View>('map')
   const [tab, setTabState] = useState<Tab>('map')
   const [outcome, setOutcome] = useState<Outcome>('confirmed')
@@ -23,11 +25,14 @@ export default function App() {
 
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
-  const [teamProgress, setTeamProgress] = useState(31)
+  const [teamGoal, setTeamGoal] = useState<TeamGoal | null>(null)
+  const [pointsAwarded, setPointsAwarded] = useState(0)
+
 
   // initialize leaderboard
   useEffect(() => {
-    // fetch('/api/leaderboard')
+      if (view != 'teams') return;
+      getTeamGoal().then(setTeamGoal).catch(() => setTeamGoal(null));
   }, [])
 
   // auto-advance verifying screen after 2 seconds
@@ -39,61 +44,46 @@ export default function App() {
 
   const setTab = (t: Tab) => { setTabState(t); setView(t) }
 
-  const applyReward = () => {
-    if (!pending || !currentUser) return;
-
-    const updatedUser = {...currentUser };
-
-    if (outcome === 'confirmed') {
-      updatedUser.reportsTotal += 1;
-      updatedUser.reportsThisWeek += 1;
-      updatedUser.points += 10;
-
-      if (stage === 'Egg mass') {
-        setTeamProgress(p => p + 1);
-        updatedUser.eggFound = true;
-      }
-    } else if (outcome === 'native') {
-      updatedUser.points += 2;
-    }
-
-    setCurrentUser(updatedUser);
-    setPending(false);
-  }
 
   const passLesson = (lesson: number) => {
-      if (!currentUser || currentUser.passedLessons.includes(lesson)) return;
-
-      setCurrentUser({
-        ...currentUser,
-        points: currentUser.points + 10,
-        passedLessons: [...currentUser.passedLessons, lesson]
-      });
+      if (!currentUser || currentUser.passedLessons.includes(lesson)) return
+      passLessonApi(currentUser.id, lesson).then(setCurrentUser).catch(console.error)
   }
 
   const handleUpdateSettings = (key: string, val: boolean) => {
-    if (!currentUser) return;
-    // send PATCH request to /api/users/me/settings
-    setCurrentUser({...currentUser, [key]: val});
+      if (!currentUser) return
+      const previous = currentUser
+      setCurrentUser({ ...currentUser, [key]: val })
+      updateSettings(currentUser.id, { [key]: val }).then(setCurrentUser).catch(() => setCurrentUser(previous))
   }
 
-  const done = () => { applyReward(); setTab('map') }
-  const resultTeam = () => { applyReward(); setTab('teams') }
+  const done = () => { setTab('map') }
+  const resultTeam = () => { setTab('teams') }
   const resultLearn = () => {
-    applyReward();
     setTabState('learn');
     setView('learn');
     setTimeout(()=>document.getElementById('lookalikes')?.scrollIntoView({behavior:'smooth'}), 100)
   }
 
-  if (wireframe) return <WireframePrototype onExit={() => setWireframe(false)} />
+  //if (wireframe) return <WireframePrototype onExit={() => setWireframe(false)} />
+
+  // keep user logged in after page refresh
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('vtlanternfly.userId')
+      if (saved) getUser(Number(saved)).then(setCurrentUser).catch(() => localStorage.removeItem('vtlanternfly.userId'))
+    } catch { /* storage unavailable */ }
+  }, [])
 
   // trap user in AuthScreen if not logged in
   if (!currentUser) {
     return (
         <div className="app-shell">
           <div className="web-container">
-            <AuthScreen onLogin={setCurrentUser} />
+            <AuthScreen onLogin={(user) => {
+              setCurrentUser(user)
+              try { localStorage.setItem('vtlanternfly.userId', String(user.id)) } catch { /* ignore */ }
+            }} />
           </div>
         </div>
     );
@@ -102,31 +92,30 @@ export default function App() {
   return (
       <div className="app-shell">
         <div className="web-container">
-          <button className="mode-toggle" onClick={() => setWireframe(value => !value)} aria-pressed={wireframe}>
-            <span>{wireframe ? '◆' : '◇'}</span>{wireframe ? 'View design' : 'Wireframe'}
-          </button>
 
-          {view === 'map' && <MapScreen onReport={()=> {setView('capture'); setPending(true);}}/>}
+          {view === 'map' && <MapScreen onReport={()=> {setView('capture');}}/>}
           {view === 'capture' && <CaptureScreen
               userId={currentUser.id}
               onBack={()=>setTab('map')}
               onSuccess={(res) => {
-                if (res.detection.status === 'detected') {
-                  setOutcome('confirmed');
-                  setStage(res.detection.detections[0]?.label || 'Adult');
-                } else {
-                  setOutcome('uncertain');
-                }
-                setView('verifying');
+                  if (res.user) setCurrentUser(res.user)
+                  setPointsAwarded(res.points_awarded ?? 0)
+                  if (res.verification_status === 'approved') {
+                    setOutcome('confirmed')
+                    setStage(res.life_stage || 'Adult')
+                  } else {
+                    setOutcome('uncertain')
+                  }
+                  setView('verifying')
               }}
           />}
-          {view === 'verifying' && <VerifyingScreen onBack={()=>setView('capture')}/>}
-          {view === 'result' && <ResultScreen outcome={outcome} stage={stage} onDone={done} onLearn={resultLearn} onTeam={resultTeam} onRetake={()=>setView('capture')}/>}
-          {view === 'learn' && <LearnScreen passedLessons={currentUser.passedLessons} passLesson={passLesson}/>}
-          {view === 'teams' && <TeamsScreen teamsData={leaderboard} teamProgress={teamProgress}/>}
-          {view === 'me' && <ProfileScreen user={currentUser} onUpdateSettings={handleUpdateSettings}/>}
+            {view === 'verifying' && <VerifyingScreen onBack={()=>setView('capture')}/>}
+            {view === 'result' && <ResultScreen outcome={outcome} stage={stage} points={pointsAwarded} onDone={done} onLearn={resultLearn} onTeam={resultTeam} onRetake={()=>setView('capture')}/>}
+            {view === 'learn' && <LearnScreen passedLessons={currentUser.passedLessons} passLesson={passLesson}/>}
+            {view === 'teams' && <TeamsScreen teamsData={leaderboard} teamGoal={teamGoal}/>}
+            {view === 'me' && <ProfileScreen user={currentUser} onUpdateSettings={handleUpdateSettings}/>}
 
-          {(['map','learn','teams','me'] as string[]).includes(view) && <BottomNav tab={tab} setTab={setTab}/>}
+            {(['map','learn','teams','me'] as string[]).includes(view) && <BottomNav tab={tab} setTab={setTab}/>}
         </div>
       </div>
   )

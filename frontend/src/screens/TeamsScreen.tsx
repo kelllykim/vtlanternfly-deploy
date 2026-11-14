@@ -3,9 +3,12 @@ import Header from '../components/Header';
 import Icon from '../components/Icon';
 import '../styles/features.css';
 import type { LeaderboardEntry } from '../types';
+import type { TeamGoal } from '../services/api';
 
-export default function Teams({ teamsData, teamProgress }: { teamsData: LeaderboardEntry[]; teamProgress: number }) {
+export default function Teams({ teamsData, teamGoal }: { teamsData: LeaderboardEntry[]; teamGoal: TeamGoal | null }) {
     const [segment, setSegment] = useState('Teams')
+    const target = teamGoal?.target ?? 50
+    const found = teamGoal?.found ?? 0
 
     return <main className="screen teams-screen">
         <Header title="Leaderboard" eyebrow="TOGETHER, WE SPOT MORE" />
@@ -13,7 +16,14 @@ export default function Teams({ teamsData, teamProgress }: { teamsData: Leaderbo
             {['Friends','Teams','Majors','Campus'].map(x => <button className={segment === x ? 'active':''} onClick={() => setSegment(x)} key={x}>{x}</button>)}
         </div>
 
-        <section className="goal-card"><div className="goal-top"><div><small>TEAM GOAL</small><h3>50 egg masses before December</h3></div><div className="goal-icon"><Icon name="trophy"/></div></div><div className="bar"><i style={{width:`${teamProgress/50*100}%`}}/></div><p><b>{teamProgress}/50 found</b><span>{50-teamProgress} to go</span></p></section>
+        <section className="goal-card">
+            <div className="goal-top">
+                <div><small>TEAM GOAL</small><h3>{teamGoal?.title ?? 'Loading team goal…'}</h3></div>
+                <div className="goal-icon"><Icon name="trophy"/></div>
+            </div>
+            <div className="bar"><i style={{width: `${Math.min(found / target, 1) * 100}%`}}/></div>
+            <p><b>{found}/{target} found</b><span>{Math.max(target - found, 0)} to go</span></p>
+        </section>
         <div className="rank-heading"><span>RANK</span><span>TEAM / PLAYER</span><span>POINTS</span></div>
         <div className="rank-list">
             {teamsData.length === 0 && <p style={{ textAlign: 'center', color: 'var(--muted)', padding: '24px 0' }}>No verified reports yet. Be the first on the board!</p>}

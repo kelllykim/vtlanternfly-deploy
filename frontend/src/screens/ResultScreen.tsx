@@ -3,11 +3,10 @@ import Icon from '../components/Icon'
 import type { Outcome } from '../types'
 import '../styles/capture.css'
 
-export default function Result({ outcome, stage, onDone, onLearn, onTeam, onRetake }: { outcome: Outcome; stage: string; onDone: () => void; onLearn: () => void; onTeam: () => void; onRetake: () => void }) {
+export default function Result({ outcome, stage, points, onDone, onLearn, onTeam, onRetake }: { outcome: Outcome; stage: string; points: number; onDone: () => void; onLearn: () => void; onTeam: () => void; onRetake: () => void }) {
     if (outcome === 'confirmed') return <main className="screen result-screen"><Header title="Report complete" onBack={onDone} eyebrow="VERIFICATION RESULT" />
         <div className="result-icon confirmed"><Icon name="check" size={36}/></div><p className="status confirmed-text">CONFIRMED</p><h2>Spotted Lanternfly<br/>— {stage}</h2>
-        <div className="points-pill">+10 points <span>Accurate report</span></div>
-        <section className="learn-card"><div className="mini-bug"><i/><i/><b/></div><div><small>KNOW WHAT YOU FOUND</small><h3>{stage}</h3><p>Adults have gray spotted wings and a flash of red underneath. They are active from July through December.</p></div></section>
+        <div className="points-pill">+{points} points <span>Accurate report</span></div>        <section className="learn-card"><div className="mini-bug"><i/><i/><b/></div><div><small>KNOW WHAT YOU FOUND</small><h3>{stage}</h3><p>Adults have gray spotted wings and a flash of red underneath. They are active from July through December.</p></div></section>
         <button className="primary" onClick={onTeam}>See team progress</button><button className="secondary" onClick={onDone}>Done</button>
     </main>
     if (outcome === 'native') return <main className="screen result-screen"><Header title="Report complete" onBack={onDone} eyebrow="VERIFICATION RESULT" />

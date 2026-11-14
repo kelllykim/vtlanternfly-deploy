@@ -71,7 +71,10 @@ export type UploadResponse = {
   photo_id: string
   metadata: SightingMetadata
   detection: DetectionResult
-  verification_status: 'pending_review'
+  verification_status: 'approved' | 'pending_review'
+  life_stage: string | null
+  points_awarded: number
+  user: UserProfile | null
 }
 
 export async function uploadPhoto(photo: File, userId?: number): Promise<UploadResponse> {
@@ -82,3 +85,32 @@ export async function uploadPhoto(photo: File, userId?: number): Promise<UploadR
   if (!response.ok) throw new Error(await errorMessage(response, 'Upload failed'))
   return response.json() as Promise<UploadResponse>
 }
+
+export type TeamGoal = { title: string; target: number; found: number }
+
+export async function getTeamGoal(): Promise<TeamGoal> {
+  const response = await fetch('/api/team-goal', { cache: 'no-store' })
+  if (!response.ok) throw new Error(await errorMessage(response, 'Failed to load team goal'))
+  return response.json() as Promise<TeamGoal>
+}
+
+
+async function sendJson<T>(url: string, method: string, fallback: string, data?: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method,
+    cache: 'no-store',
+    headers: data === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: data === undefined ? undefined : JSON.stringify(data),
+  })
+  if (!response.ok) throw new Error(await errorMessage(response, fallback))
+  return response.json() as Promise<T>
+}
+
+export const getUser = (userId: number) =>
+    sendJson<UserProfile>(`/api/users/${userId}`, 'GET', 'Failed to load profile')
+
+export const passLessonApi = (userId: number, lesson: number) =>
+    sendJson<UserProfile>(`/api/users/${userId}/lessons/${lesson}/pass`, 'POST', 'Failed to save quiz')
+
+export const updateSettings = (userId: number, settings: { anonymous?: boolean; shareWithResearchers?: boolean }) =>
+    sendJson<UserProfile>(`/api/users/${userId}/settings`, 'PATCH', 'Failed to save settings', settings)
