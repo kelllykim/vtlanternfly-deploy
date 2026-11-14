@@ -69,16 +69,16 @@ export default function ProfileScreen({ user, onUpdateSettings }: { user: UserPr
             <div><span>≋</span><b>{user.reportsByStage.eggMass}</b><small>Egg masses</small></div>
         </section>
         <div className="section-title">
-            <div><small>THIS WEEK</small>
-                <h2>Personal goals</h2>
+            <div><small>EARN 10 POINTS EACH</small>
+                <h2>Goals</h2>
             </div>
         </div>
-        <section className="personal-goals">{[
-            ['Report 3 verified lanternflies this week', `${Math.min(user.reportsThisWeek, 3)}/3`, user.reportsThisWeek >= 3],
-            ['Find and scrape 1 egg mass', user.eggFound ? '1/1' : '0/1', user.eggFound],
-            ['Complete a Learn quiz', user.passedLessons.length ? '1/1' : '0/1', user.passedLessons.length > 0],
-            ['Invite 1 friend', '0/1', false],
-        ].map(([label, count, complete]) => <div key={String(label)} className={complete ? 'complete' : ''}><span>{complete ? <Icon name="check" size={16}/> : ''}</span><b>{label}</b><small>{count}</small></div>)}
+        <section className="personal-goals">{user.goals.map(goal =>
+            <div key={goal.key} className={goal.completed ? 'complete' : ''}>
+                <span>{goal.completed ? <Icon name="check" size={16}/> : ''}</span>
+                <b>{goal.label}</b>
+                <small>{goal.current}/{goal.target}<span style={{ marginInline: '8px', fontSize: '20px', verticalAlign: 'middle' }}>·</span>{goal.rewarded ? '+10 earned' : '+10 pts'}</small>
+            </div>)}
         </section>
 
         <div className="section-title">

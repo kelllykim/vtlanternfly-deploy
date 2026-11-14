@@ -1,13 +1,28 @@
-import { useState } from 'react';
-import { loginUser, registerUser } from '../services/api';
+import { useEffect, useState } from 'react';
+import { loginUser, registerUser, getMajors } from '../services/api';
 import type { UserProfile } from '../types';
+import MajorSelect from '../components/MajorSelect';
 
-export default function AuthScreen({ onLogin }: { onLogin: (user: UserProfile) => void}) {
-    const [isRegistering, setIsRegistering] = useState(true);
+export default function AuthScreen({ onLogin, initiallyRegistering = true }: { onLogin: (user: UserProfile) => void; initiallyRegistering?: boolean }) {
+    const [isRegistering, setIsRegistering] = useState(initiallyRegistering);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [displayName, setDisplayName] = useState('');
     const [major, setMajor] = useState('');
+    const [majors, setMajors] = useState<string[]>([]);
+    const [majorsError, setMajorsError] = useState<string | null>(null);
+    const [majorsLoading, setMajorsLoading] = useState(true);
+    const [majorsRetry, setMajorsRetry] = useState(0);
+
+    useEffect(() => {
+        let cancelled = false;
+        setMajorsLoading(true);
+        setMajorsError(null);
+        getMajors().then(items => { if (!cancelled) setMajors(items); })
+            .catch(err => { if (!cancelled) setMajorsError(err instanceof Error ? err.message : 'Could not load majors'); })
+            .finally(() => { if (!cancelled) setMajorsLoading(false); });
+        return () => { cancelled = true; };
+    }, [majorsRetry]);
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
@@ -44,9 +59,11 @@ export default function AuthScreen({ onLogin }: { onLogin: (user: UserProfile) =
                         <input type="text" placeholder="Display Name (e.g. Alex Morgan)" value={displayName}
                                onChange={e => setDisplayName(e.target.value)}
                                required style={{ padding: '14px', borderRadius: '12px', border: '1px solid var(--line)' }}/>
-                        <input type="text" placeholder="Major (Optional)" value={major}
-                               onChange={e => setMajor(e.target.value)}
-                               style={{ padding: '14px', borderRadius: '12px', border: '1px solid var(--line)'}} />
+                        <MajorSelect value={major} options={majors} onChange={setMajor}
+                            disabled={majorsLoading || !!majorsError} loading={majorsLoading} />
+                        {majorsError && <div role="alert" style={{ color: '#b91c1c', fontSize: '12px' }}>
+                            {majorsError} <button type="button" onClick={() => setMajorsRetry(value => value + 1)}>Retry</button>
+                        </div>}
                     </>
                 )}
 
@@ -60,7 +77,7 @@ export default function AuthScreen({ onLogin }: { onLogin: (user: UserProfile) =
 
                 {error && <p style={{ color: '#b91c1c', fontSize: '12px', margin: 0}}>{error}</p>}
 
-                <button type="submit" className="primary" style={{ marginTop: '8px' }} disabled={submitting}>
+                <button type="submit" className="primary" style={{ marginTop: '8px' }} disabled={submitting || (isRegistering && (majorsLoading || !!majorsError))}>
                     {submitting ? 'Please wait…' : isRegistering ? 'Create Account' : 'Log In'}
                 </button>
             </form>

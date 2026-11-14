@@ -3,14 +3,20 @@
 A detection is a model prediction, NOT a confirmed sighting. Model weights must
 come from a trusted teammate: PyTorch checkpoint files can execute code on load.
 """
+import os
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
 
+from dotenv import load_dotenv
 from PIL import Image, ImageOps
 
 MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "my_model.pt"
-CONFIDENCE_THRESHOLD = 0.25
+# Load here because this service is imported before database.py loads .env.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+CONFIDENCE_THRESHOLD = float(os.environ.get("LANTERNFLY_CONFIDENCE_THRESHOLD", "0.25"))
+if not 0 < CONFIDENCE_THRESHOLD <= 1:
+    raise ValueError("LANTERNFLY_CONFIDENCE_THRESHOLD must be greater than 0 and at most 1")
 IMAGE_SIZE = 1024  # Improved detection of small lanternflies in uploaded photos.
 _model_lock = Lock()
 

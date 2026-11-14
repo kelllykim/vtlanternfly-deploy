@@ -20,6 +20,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     major: Mapped[str | None] = mapped_column(String(100))
+    invited_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     anonymous: Mapped[bool] = mapped_column(Boolean, default=False)
     share_with_researchers: Mapped[bool] = mapped_column(Boolean, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -83,3 +84,45 @@ class QuizPass(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     lesson_index: Mapped[int] = mapped_column(Integer, primary_key=True)
     passed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Team(Base):
+    __tablename__ = "teams"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    invite_code: Mapped[str] = mapped_column(String(16), unique=True, nullable=False)
+
+
+class TeamMember(Base):
+    __tablename__ = "team_members"
+
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True, unique=True)
+
+
+class Friendship(Base):
+    __tablename__ = "friendships"
+
+    requester_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    addressee_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    status: Mapped[str] = mapped_column(Enum("pending", "accepted", "declined"), default="pending")
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class GoalReward(Base):
+    __tablename__ = "goal_rewards"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    goal_key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    period_key: Mapped[str] = mapped_column(String(10), primary_key=True)
+    awarded_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

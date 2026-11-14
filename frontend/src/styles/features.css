@@ -612,7 +612,7 @@
 
 .team-actions {
     display: grid;
-    grid-template-columns: 1.25fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 8px;
     margin-top: 14px;
 }

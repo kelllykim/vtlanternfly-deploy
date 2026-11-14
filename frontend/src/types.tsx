@@ -23,9 +23,17 @@ export interface UserProfile {
     shareWithResearchers: boolean;
     badges: string[];
     passedLessons: number[];
+    goals: { key: string; label: string; current: number; target: number;
+        completed: boolean; rewarded: boolean; period: string; points: number }[];
 }
 
+export type LeaderboardSegment = 'Friends' | 'Teams' | 'Majors' | 'Campus';
+
 export interface LeaderboardEntry {
+    major?: string | null;
+    sightings: number;
+    id: number | string;
+    rank: number;
     name: string;
     points: number;
     isCurrentUser: boolean;

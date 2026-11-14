@@ -1,16 +1,18 @@
 """VT-Lanternfly development API: upload, EXIF extraction, and YOLO inference.
 
-Accounts (register/login) use MySQL via SQLAlchemy; sightings still use local JSONL.
+Accounts, sightings, points, and map data use MySQL via SQLAlchemy.
 """
 import hashlib
+import secrets
 import io
 import re
 from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
 from uuid import uuid4
+from typing import Literal
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, Response
@@ -23,26 +25,24 @@ from PIL import Image, UnidentifiedImageError
 
 from metadata_extractor import extract_metadata
 from metadata_processor import process_metadata
-from sighting_store import append_sighting, read_sightings
 from map_visualization import generate_map
+from majors import MAJORS, validate_major
 
 # User accounts (MySQL via SQLAlchemy)
 import bcrypt
 from fastapi import Depends
-from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import func, select
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from sqlalchemy import func, select, delete
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from database import SessionLocal, get_db
-from db_models import Badge, PointEvent, QuizPass, Report, User, UserBadge
+from db_models import Badge, PointEvent, QuizPass, Report, User, UserBadge, Team, TeamMember, Friendship, UserSession, GoalReward
 
 
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = Path(os.environ.get("LANTERNFLY_UPLOAD_DIR", BASE_DIR / "uploads"))
-SIGHTINGS_FILE = UPLOAD_DIR.parent / "sightings.jsonl"
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
-AUTO_APPROVE_CONFIDENCE = 0.5   # model confidence needed to approve automatically
 STAGE_POINTS = {"Adult": 10, "Black nymph": 10, "Red nymph": 10, "Egg mass": 15}
 CORRECT_STAGE_BONUS = 5
 QUIZ_POINTS = 10
@@ -54,10 +54,77 @@ app = FastAPI(title="VT-Lanternfly API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8443", "http://127.0.0.1:8443", "http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Requested-With"],
 )
+
+
+SESSION_COOKIE = "vtlanternfly_session"
+SESSION_SECONDS = 7 * 24 * 60 * 60
+COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true"
+
+
+@app.middleware("http")
+async def protect_api_requests(request: Request, call_next):
+    # A custom header forces cross-origin browser writes through CORS preflight.
+    if (request.url.path.startswith("/api/")
+            and request.method in {"POST", "PATCH", "PUT", "DELETE"}
+            and request.headers.get("X-Requested-With") != "VT-Lanternfly"):
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=403, content={"detail": "Invalid request origin"})
+    response = await call_next(request)
+    if request.url.path.startswith(("/api/auth/", "/api/me/", "/api/users/", "/api/leaderboard")):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _start_session(request: Request, response: Response, db: Session, user: User):
+    old_token = request.cookies.get(SESSION_COOKIE)
+    if old_token:
+        db.execute(delete(UserSession).where(UserSession.token_hash == _token_hash(old_token)))
+    token = secrets.token_urlsafe(32)
+    db.add(UserSession(user_id=user.id, token_hash=_token_hash(token),
+                       expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=SESSION_SECONDS)))
+    db.commit()
+    response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_SECONDS,
+                        httponly=True, secure=COOKIE_SECURE or request.url.scheme == "https", samesite="lax", path="/")
+
+
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+    token = request.cookies.get(SESSION_COOKIE)
+    if token:
+        user = db.scalar(select(User).join(UserSession, UserSession.user_id == User.id).where(
+            UserSession.token_hash == _token_hash(token),
+            UserSession.expires_at > datetime.now(timezone.utc).replace(tzinfo=None),
+        ))
+        if user is not None:
+            return user
+    raise HTTPException(status_code=401, detail="Please log in again. Your session has expired or is invalid.")
+
+
+@app.get("/api/auth/me")
+def current_profile(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return _user_profile(db, user)
+
+
+@app.post("/api/auth/logout")
+def logout_user(request: Request, response: Response, db: Session = Depends(get_db)):
+    token = request.cookies.get(SESSION_COOKIE)
+    if token:
+        db.execute(delete(UserSession).where(UserSession.token_hash == _token_hash(token)))
+        db.commit()
+    response.delete_cookie(SESSION_COOKIE, path="/", secure=COOKIE_SECURE or request.url.scheme == "https", httponly=True, samesite="lax")
+    return {"message": "Logged out"}
+
+
+@app.get("/api/majors")
+def list_majors():
+    return MAJORS
 
 
 @app.get("/api/health")
@@ -70,6 +137,11 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=8, max_length=72)  # bcrypt limit is 72 bytes
     display_name: str = Field(min_length=1, max_length=100)
     major: str | None = Field(default=None, max_length=100)
+
+    @field_validator("major")
+    @classmethod
+    def official_major(cls, value: str | None) -> str | None:
+        return validate_major(value)
 
 
 class UserLogin(BaseModel):
@@ -92,6 +164,53 @@ def _user_points(db: Session, user_id: int) -> int:
     return db.scalar(
         select(func.coalesce(func.sum(PointEvent.points), 0)).where(PointEvent.user_id == user_id)
     )
+
+
+def _goal_progress(db: Session, user_id: int) -> list[dict]:
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    approved = select(func.count(Report.id)).where(Report.user_id == user_id, Report.review_status == "approved")
+    rewards = {(r.goal_key, r.period_key) for r in db.scalars(select(GoalReward).where(GoalReward.user_id == user_id))}
+    definitions = [
+        ("report_3", "Report 3 verified lanternflies this week", 3,
+         db.scalar(approved.where(Report.created_at >= week_start)), week_start.date().isoformat()),
+        ("egg_mass", "Find 1 verified egg mass", 1,
+         db.scalar(approved.where(Report.life_stage_verified == "Egg mass")), "all-time"),
+        ("quiz", "Complete a Learn quiz", 1,
+         db.scalar(select(func.count()).select_from(QuizPass).where(QuizPass.user_id == user_id)), "all-time"),
+        ("invite", "Invite 1 friend", 1,
+         db.scalar(select(func.count(User.id)).where(User.invited_by == user_id)), "all-time"),
+    ]
+    return [{"key": key, "label": label, "current": min(count, target), "target": target,
+             "completed": count >= target, "rewarded": (key, period) in rewards,
+             "period": period, "points": 10}
+            for key, label, target, count, period in definitions]
+
+
+def _award_goal_rewards(db: Session, user_id: int) -> int:
+    """Unique goal/period records keep bonuses idempotent, including concurrent requests."""
+    db.flush()
+    awarded = 0
+    for goal in _goal_progress(db, user_id):
+        if not goal["completed"] or goal["rewarded"]:
+            continue
+        try:
+            with db.begin_nested():
+                db.add(GoalReward(user_id=user_id, goal_key=goal["key"], period_key=goal["period"]))
+                db.flush()
+                db.add(PointEvent(user_id=user_id, points=10, reason=f"Goal completed: {goal['label']}"))
+        except IntegrityError:
+            # A simultaneous request already awarded this goal for this period.
+            continue
+        awarded += 10
+    return awarded
+
+
+@app.post("/api/me/goals/claim")
+def claim_goals(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _award_goal_rewards(db, user.id)
+    db.commit()
+    return _user_profile(db, user)
 
 
 def _user_profile(db: Session, user: User) -> dict:
@@ -130,6 +249,7 @@ def _user_profile(db: Session, user: User) -> dict:
             select(Badge.name).join(UserBadge, UserBadge.badge_id == Badge.id)
             .where(UserBadge.user_id == user.id)
         )),
+        "goals": _goal_progress(db, user.id),
         "passedLessons": list(db.scalars(
             select(QuizPass.lesson_index).where(QuizPass.user_id == user.id)
         )),
@@ -137,7 +257,7 @@ def _user_profile(db: Session, user: User) -> dict:
 
 
 @app.post("/api/auth/register", status_code=201)
-def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
+def register_user(user_data: UserCreate, request: Request, response: Response, db: Session = Depends(get_db)):
     email = user_data.email.lower()
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -156,14 +276,16 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=400, detail="Email already registered")
     db.refresh(new_user)
+    _start_session(request, response, db, new_user)
     return _user_profile(db, new_user)
 
 
 @app.post("/api/auth/login")
-def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
+def login_user(credentials: UserLogin, request: Request, response: Response, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == credentials.email.lower()))
     if user is None or not _verify_password(credentials.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
+    _start_session(request, response, db, user)
     return _user_profile(db, user)
 
 
@@ -179,35 +301,43 @@ async def database_unavailable(_request, exc: OperationalError):
     return JSONResponse(status_code=503, content={"detail": detail})
 
 
-def _mapped_sightings() -> list[dict]:
-    """Only AI-detected sightings with actual coordinates appear on the prototype map."""
-    return [
-        record for record in read_sightings(SIGHTINGS_FILE)
-        if record.get("detection_status") == "detected"
-        and record.get("latitude") is not None
-        and record.get("longitude") is not None
-    ]
+def _mapped_sightings(db: Session) -> list[dict]:
+    """The map only publishes approved database reports with valid GPS."""
+    reports = db.scalars(select(Report).where(
+        Report.review_status == "approved",
+        Report.lat.between(-90, 90),
+        Report.lng.between(-180, 180),
+    ).order_by(Report.id))
+    return [{
+        "photo_id": report.photo_hash,
+        "image_id": Path(report.stored_name).stem,
+        "latitude": float(report.lat),
+        "longitude": float(report.lng),
+        "verified": True,
+    } for report in reports]
 
 
 @app.get("/api/sightings/summary")
-def sighting_summary():
-    records = read_sightings(SIGHTINGS_FILE)
+def sighting_summary(db: Session = Depends(get_db)):
     return {
-        "uploaded": len(records),
-        "mapped": len(_mapped_sightings()),
-        "detected": sum(record.get("detection_status") == "detected" for record in records),
+        "uploaded": db.scalar(select(func.count(Report.id))),
+        "mapped": len(_mapped_sightings(db)),
+        "detected": db.scalar(select(func.count(Report.id)).where(Report.review_status == "approved")),
     }
 
 
 @app.get("/api/photos/{image_id}")
-def sighting_photo(image_id: str):
-    """Serve a browser-compatible preview of a locally indexed uploaded photograph."""
+def sighting_photo(image_id: str, db: Session = Depends(get_db)):
+    """Serve photos only while their approved database report exists."""
     if not re.fullmatch(r"[0-9a-f]{32}", image_id):
         raise HTTPException(status_code=404, detail="Photograph not found")
-    record = next((item for item in read_sightings(SIGHTINGS_FILE) if item.get("image_id") == image_id), None)
-    if record is None:
+    report = db.scalar(select(Report).where(
+        Report.review_status == "approved",
+        Report.stored_name.like(image_id + ".%"),
+    ))
+    if report is None:
         raise HTTPException(status_code=404, detail="Photograph not found")
-    path = UPLOAD_DIR / record["stored_name"]
+    path = UPLOAD_DIR / report.stored_name
     if not path.is_file() or path.parent.resolve() != UPLOAD_DIR.resolve():
         raise HTTPException(status_code=404, detail="Photograph not found")
     from PIL import ImageOps
@@ -220,17 +350,14 @@ def sighting_photo(image_id: str):
 
 
 @app.get("/api/map", response_class=HTMLResponse)
-def sightings_map():
+def sightings_map(db: Session = Depends(get_db)):
     """Render the original Folium/Leaflet map inside the React frontend."""
-    mapped = _mapped_sightings()
+    mapped = _mapped_sightings(db)
     image_urls = {str(r["photo_id"]): f"/api/photos/{r['image_id']}" for r in mapped}
-    rows = [
-        {**record, "verified": None}
-        for record in mapped
-    ]
+    rows = mapped
     if not rows:
         rows = [{"latitude": None, "longitude": None, "verified": None}]
-    map_object = generate_map(rows, image_urls=image_urls, allow_empty=True)
+    map_object = generate_map(rows, verified_only=True, image_urls=image_urls, allow_empty=True)
     return HTMLResponse(
         map_object.get_root().render(),
         headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
@@ -295,22 +422,23 @@ def _award_badges(db: Session, user_id: int) -> None:
 
 
 def _save_report(record: dict, detection: dict, user_id: int | None, life_stage: str | None) -> dict:
-    result = {"report_id": None, "review_status": "pending", "life_stage": None, "points_awarded": 0}
+    result = {"report_id": None, "review_status": "unavailable", "life_stage": None, "points_awarded": 0, "duplicate": False}
     detections = detection.get("detections") or []
     best = max(detections, key=lambda d: d.get("confidence", 0), default=None)
-    confident = (detection.get("status") == "detected" and best is not None
-                 and best.get("confidence", 0) >= AUTO_APPROVE_CONFIDENCE)
+    confident = detection.get("status") == "detected" and best is not None
+    if detection.get("status") == "unavailable":
+        return result
     stage = _normalize_stage(best.get("label")) if best else None
     try:
         with SessionLocal() as db:
             existing = db.scalar(select(Report).where(Report.photo_hash == record["photo_id"]))
-            if existing is not None:  # same photo again: no extra points
+            if existing is not None and (existing.review_status != "pending" or existing.user_id != user_id):  # no extra points
                 result.update(report_id=existing.id, review_status=existing.review_status,
-                              life_stage=existing.life_stage_verified)
+                              life_stage=existing.life_stage_verified, duplicate=True)
                 return result
             if user_id is not None and db.get(User, user_id) is None:
                 user_id = None
-            report = Report(
+            report_values = dict(
                 user_id=user_id,
                 photo_hash=record["photo_id"],
                 stored_name=record["stored_name"],
@@ -323,9 +451,18 @@ def _save_report(record: dict, detection: dict, user_id: int | None, life_stage:
                 detection_status=detection.get("status"),
                 model_confidence=round(best["confidence"], 4) if best else None,
                 bbox=[d.get("bbox_xyxy") for d in detections] or None,
-                review_status="approved" if confident else "pending",
+                review_status="approved" if confident else "rejected",
             )
-            db.add(report)
+            # Re-uploading an older pending report resolves it automatically.
+            if existing is not None:
+                report = existing
+                report_values["user_id"] = existing.user_id
+                user_id = existing.user_id
+                for key, value in report_values.items():
+                    setattr(report, key, value)
+            else:
+                report = Report(**report_values)
+                db.add(report)
             db.flush()  # gives report.id
             points = 0
             if confident and user_id is not None:
@@ -335,12 +472,23 @@ def _save_report(record: dict, detection: dict, user_id: int | None, life_stage:
                 db.add(PointEvent(user_id=user_id, report_id=report.id, points=points,
                                   reason=f"Verified report: {stage}"))
                 _award_badges(db, user_id)
+                points += _award_goal_rewards(db, user_id)
             db.commit()
             result.update(report_id=report.id, review_status=report.review_status,
                           life_stage=stage if confident else None, points_awarded=points)
             return result
+    except IntegrityError:
+        # A simultaneous upload may have committed the same unique photo hash.
+        with SessionLocal() as db:
+            existing = db.scalar(select(Report).where(Report.photo_hash == record["photo_id"]))
+            if existing is not None:
+                result.update(report_id=existing.id, review_status=existing.review_status,
+                              life_stage=existing.life_stage_verified, duplicate=True)
+                return result
+        logger.exception("Could not save report due to a database constraint")
+        return result
     except SQLAlchemyError:
-        logger.exception("Could not save report to MySQL; kept in sightings.jsonl only")
+        logger.exception("Could not save report to MySQL; no points awarded or map publication")
         return result
 
 
@@ -357,13 +505,14 @@ def _profile_by_id(user_id: int | None) -> dict | None:
 @app.post("/api/sightings", status_code=201)
 async def upload_sighting(
     photo: UploadFile = File(...),
-    user_id: int | None = Form(None),
+    current_user: User = Depends(get_current_user),
     life_stage: str | None = Form(None, max_length=50),
 ):
     """Validate and store photo; return EXIF metadata and YOLO detections.
 
-    Stored files are private and not yet associated with a user or database.
+    Only approved reports earn points and appear on the database-backed map.
     """
+    user_id = current_user.id
     extension = Path(photo.filename or "").suffix.lower()
     if extension not in {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".mpo"}:
         raise HTTPException(status_code=400, detail="Use a JPG, PNG, WebP, HEIC, or MPO photo.")
@@ -409,8 +558,7 @@ async def upload_sighting(
                 "detections": [], "detection_count": 0,
                 "message": "Detection model is unavailable; see backend logs.",
             }
-        # A temporary JSONL index lets the live map survive server restarts.
-        # This is not a user-account database and does not imply AI approval.
+        # Persist once in MySQL; the map and points use the same report status.
         stored_record = {
             **metadata,
             "image_id": destination.stem,
@@ -418,20 +566,23 @@ async def upload_sighting(
             "detection_status": detection["status"],
             "uploaded_at": datetime.now(timezone.utc).isoformat(),
         }
-        try:
-            await run_in_threadpool(append_sighting, SIGHTINGS_FILE, stored_record)
-        except OSError:
-            logger.exception("Failed to persist local sighting index")
-            raise HTTPException(status_code=500, detail="Could not save sighting locally.")
         saved = await run_in_threadpool(_save_report, stored_record, detection, user_id, life_stage)
-        approved = saved["review_status"] == "approved"
+        if saved["duplicate"]:
+            destination.unlink(missing_ok=True)  # keep the original stored photo
+        verification_status = saved["review_status"] if saved["review_status"] != "pending" else "unavailable"
+        messages = {
+            "approved": "Automatically approved.",
+            "rejected": "No lanternfly detected. Try another photo.",
+            "unavailable": "Could not complete identification or save the report. Please retry.",
+        }
         return {
-            "message": "Verified; points awarded." if approved else "Saved to the review queue.",
+            "message": "This photo has already been submitted; no additional points awarded." if saved["duplicate"] else messages[verification_status],
+            "duplicate": saved["duplicate"],
             "report_id": saved["report_id"],
             "photo_id": digest.hexdigest(),
             "metadata": metadata,
             "detection": detection,
-            "verification_status": "approved" if approved else "pending_review",
+            "verification_status": verification_status,
             "life_stage": saved["life_stage"],
             "points_awarded": saved["points_awarded"],
             "user": await run_in_threadpool(_profile_by_id, user_id),
@@ -446,6 +597,134 @@ async def upload_sighting(
         raise HTTPException(status_code=400, detail="Could not process image.") from exc
     finally:
         await photo.close()
+
+class FriendRequestCreate(BaseModel):
+    email: EmailStr
+
+
+class FriendRequestResponse(BaseModel):
+    action: Literal["accept", "decline"]
+
+
+@app.get("/api/me/friend-requests")
+def friend_requests(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    incoming = db.execute(select(Friendship, User).join(User, User.id == Friendship.requester_id).where(
+        Friendship.addressee_id == user.id, Friendship.status == "pending"
+    ).order_by(User.display_name, User.id)).all()
+    return [{"requesterId": sender.id, "name": sender.display_name} for _, sender in incoming]
+
+
+@app.post("/api/me/friend-requests", status_code=201)
+def send_friend_request(data: FriendRequestCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    recipient = db.scalar(select(User).where(User.email == data.email.lower()))
+    if recipient is None:
+        raise HTTPException(status_code=404, detail="No account found with that email address")
+    if recipient.id == user.id:
+        raise HTTPException(status_code=400, detail="You cannot add yourself as a friend")
+    # Serialize both directions of a pair so simultaneous sends cannot create two requests.
+    db.execute(select(User.id).where(User.id.in_([user.id, recipient.id])).order_by(User.id).with_for_update()).all()
+    existing = db.scalar(select(Friendship).where(
+        ((Friendship.requester_id == user.id) & (Friendship.addressee_id == recipient.id)) |
+        ((Friendship.requester_id == recipient.id) & (Friendship.addressee_id == user.id))
+    ).with_for_update())
+    if existing is not None:
+        if existing.status == "accepted":
+            raise HTTPException(status_code=409, detail="You are already friends")
+        if existing.status == "pending":
+            detail = ("Friend request already sent" if existing.requester_id == user.id
+                      else "This person has already sent you a request. Accept it below.")
+            raise HTTPException(status_code=409, detail=detail)
+        db.delete(existing)
+        db.flush()
+    db.add(Friendship(requester_id=user.id, addressee_id=recipient.id, status="pending"))
+    db.commit()
+    return {"message": "Friend request sent"}
+
+
+@app.patch("/api/me/friend-requests/{requester_id}")
+def respond_friend_request(requester_id: int, data: FriendRequestResponse,
+                           user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    friendship = db.scalar(select(Friendship).where(
+        Friendship.requester_id == requester_id, Friendship.addressee_id == user.id
+    ).with_for_update())
+    if friendship is None:
+        raise HTTPException(status_code=404, detail="Friend request not found")
+    status = "accepted" if data.action == "accept" else "declined"
+    if friendship.status != "pending" and friendship.status != status:
+        raise HTTPException(status_code=409, detail="This request has already been answered")
+    friendship.status = status
+    db.commit()
+    return {"message": "Friend request accepted" if status == "accepted" else "Friend request declined"}
+
+
+@app.get("/api/leaderboard")
+def leaderboard(
+    segment: Literal["Friends", "Teams", "Majors", "Campus"] = "Campus",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _leaderboard(current_user, segment, db)
+
+
+def _leaderboard(current: User, segment: str, db: Session):
+    totals = (select(PointEvent.user_id, func.sum(PointEvent.points).label("points"))
+              .group_by(PointEvent.user_id).subquery())
+    users = db.execute(
+        select(User, func.coalesce(totals.c.points, 0))
+        .outerjoin(totals, totals.c.user_id == User.id)
+    ).all()
+    sightings = dict(db.execute(
+        select(Report.user_id, func.count(Report.id))
+        .where(Report.review_status == "approved", Report.user_id.is_not(None))
+        .group_by(Report.user_id)
+    ).all())
+    entries = []
+    if segment == "Teams":
+        memberships = db.execute(select(TeamMember.team_id, TeamMember.user_id)).all()
+        points = {user.id: int(total) for user, total in users}
+        for team in db.scalars(select(Team)):
+            members = {uid for tid, uid in memberships if tid == team.id}
+            entries.append({"id": team.id, "name": team.name,
+                            "points": sum(points.get(uid, 0) for uid in members),
+                            "sightings": sum(sightings.get(uid, 0) for uid in members),
+                            "isCurrentUser": current.id in members})
+    elif segment == "Majors":
+        majors = {}
+        for user, total in users:
+            major = (user.major or "").strip()
+            if not major:
+                continue
+            entry = majors.setdefault(major, {"id": major, "name": major,
+                                              "points": 0, "sightings": 0, "isCurrentUser": False})
+            entry["points"] += int(total)
+            entry["sightings"] += sightings.get(user.id, 0)
+            entry["isCurrentUser"] |= user.id == current.id
+        entries = list(majors.values())
+    else:
+        visible = {current.id}
+        if segment == "Friends":
+            for friendship in db.scalars(select(Friendship).where(Friendship.status == "accepted")):
+                if friendship.requester_id == current.id:
+                    visible.add(friendship.addressee_id)
+                if friendship.addressee_id == current.id:
+                    visible.add(friendship.requester_id)
+        for user, total in users:
+            if segment == "Friends" and user.id not in visible:
+                continue
+            entries.append({"id": user.id,
+                            "name": "Anonymous Hokie" if user.anonymous else user.display_name,
+                            "points": int(total), "sightings": sightings.get(user.id, 0),
+                            "major": user.major, "isCurrentUser": user.id == current.id})
+    entries.sort(key=lambda entry: (-entry["points"], entry["name"].casefold(), entry["id"]))
+    previous_points = None
+    rank = 0
+    for index, entry in enumerate(entries, 1):
+        if entry["points"] != previous_points:
+            rank = index
+        entry["rank"] = rank
+        previous_points = entry["points"]
+    return entries
+
 
 TEAM_GOAL_TARGET = 20
 @app.get("/api/team-goal")
@@ -470,13 +749,15 @@ def _get_user_or_404(db: Session, user_id: int) -> User:
 
 
 @app.get("/api/users/{user_id}")
-def get_user(user_id: int, db: Session = Depends(get_db)):
-    return _user_profile(db, _get_user_or_404(db, user_id))
+def get_user(user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only access your own profile")
+    return _user_profile(db, current_user)
 
 
-@app.post("/api/users/{user_id}/lessons/{lesson_index}/pass")
-def pass_lesson(user_id: int, lesson_index: int, db: Session = Depends(get_db)):
-    user = _get_user_or_404(db, user_id)
+@app.post("/api/me/lessons/{lesson_index}/pass")
+def pass_lesson(lesson_index: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    user_id = user.id
     if not 0 <= lesson_index < LESSON_COUNT:
         raise HTTPException(status_code=400, detail="Unknown lesson")
     if db.get(QuizPass, (user_id, lesson_index)) is None:  # points only once
@@ -484,6 +765,7 @@ def pass_lesson(user_id: int, lesson_index: int, db: Session = Depends(get_db)):
         db.add(PointEvent(user_id=user_id, lesson_id=lesson_index, points=QUIZ_POINTS,
                           reason=f"Passed lesson {lesson_index + 1}"))
         _award_badges(db, user_id)
+        _award_goal_rewards(db, user_id)
         db.commit()
     return _user_profile(db, user)
 
@@ -493,9 +775,8 @@ class SettingsUpdate(BaseModel):
     shareWithResearchers: bool | None = None
 
 
-@app.patch("/api/users/{user_id}/settings")
-def update_settings(user_id: int, settings: SettingsUpdate, db: Session = Depends(get_db)):
-    user = _get_user_or_404(db, user_id)
+@app.patch("/api/me/settings")
+def update_settings(settings: SettingsUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if settings.anonymous is not None:
         user.anonymous = settings.anonymous
     if settings.shareWithResearchers is not None:

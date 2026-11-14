@@ -96,7 +96,7 @@ def _photo_html(path: Path | None, output_path: Path | None) -> str:
     url = quote(relative.as_posix(), safe="/")
     return (
         f'<img src="{escape(url, quote=True)}" alt="Photograph of sighting" '
-        'style="display:block;max-width:100%;width:260px;max-height:230px;'
+        'style="display:block;width:min(360px,65vw);height:auto;max-height:40vh;'
         'object-fit:contain;margin-bottom:8px;border-radius:6px" loading="lazy">'
     )
 
@@ -227,28 +227,15 @@ def generate_map(
             image_url = escape(image_urls[photo_key], quote=True)
             photo_image = (
                 f'<img src="{image_url}" alt="Uploaded sighting" '
-                'style="display:block;max-width:100%;width:260px;max-height:230px;'
+                'style="display:block;width:min(360px,65vw);height:auto;max-height:40vh;'
                 'object-fit:contain;margin-bottom:8px;border-radius:6px" loading="lazy">'
             )
-        photo = _display(file_key or photo_key)
-        timestamp = _display(row.get("timestamp", row.get("date_time_original")))
-        location_source = _display(row.get("location_source"))
-        accuracy = _display(row.get("accuracy_meters"))
         latitude = float(row["latitude"])
         longitude = float(row["longitude"])
-        popup = (
-            photo_image +
-            f"<strong>Photo:</strong> {photo}<br>"
-            f"<strong>Time:</strong> {timestamp}<br>"
-            f"<strong>Status:</strong> {status_text}<br>"
-            f"<strong>Location source:</strong> {location_source}<br>"
-            f"<strong>GPS accuracy (m):</strong> {accuracy}<br>"
-            f"<strong>Coordinates:</strong> {latitude:.6f}, {longitude:.6f}"
-        )
         folium.Marker(
             location=[latitude, longitude],
-            tooltip=f"Photo {photo} — {status_text}",
-            popup=folium.Popup(popup, max_width=320),
+            tooltip="View photo",
+            popup=folium.Popup(photo_image, max_width=400),
             icon=folium.Icon(color=color, icon="info-sign"),
         ).add_to(cluster)
 

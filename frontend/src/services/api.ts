@@ -1,5 +1,15 @@
 import type { UserProfile } from '../types';
 
+export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(options.headers)
+  if (options.method && options.method !== 'GET') headers.set('X-Requested-With', 'VT-Lanternfly')
+  const response = await fetch(url, { ...options, headers, credentials: 'same-origin' })
+  if (response.status === 401 && !['/api/auth/login', '/api/auth/register'].includes(url)) {
+    window.dispatchEvent(new Event('vtlanternfly:session-expired'))
+  }
+  return response
+}
+
 // FastAPI sends `detail` as a string for HTTPException, but as a list of
 // { loc, msg } objects for validation (422) errors. Turn either into readable text.
 async function errorMessage(response: Response, fallback: string): Promise<string> {
@@ -19,7 +29,7 @@ async function errorMessage(response: Response, fallback: string): Promise<strin
 }
 
 async function postJson<T>(url: string, data: unknown, fallback: string): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -67,21 +77,21 @@ export type DetectionResult = {
 }
 export type UploadResponse = {
   message: string
+  duplicate: boolean
   report_id: number | null
   photo_id: string
   metadata: SightingMetadata
   detection: DetectionResult
-  verification_status: 'approved' | 'pending_review'
+  verification_status: 'approved' | 'rejected' | 'unavailable'
   life_stage: string | null
   points_awarded: number
   user: UserProfile | null
 }
 
-export async function uploadPhoto(photo: File, userId?: number): Promise<UploadResponse> {
+export async function uploadPhoto(photo: File): Promise<UploadResponse> {
   const data = new FormData()
   data.append('photo', photo)
-  if (userId !== undefined) data.append('user_id', String(userId))
-  const response = await fetch('/api/sightings', { method: 'POST', body: data })
+  const response = await apiFetch('/api/sightings', { method: 'POST', body: data })
   if (!response.ok) throw new Error(await errorMessage(response, 'Upload failed'))
   return response.json() as Promise<UploadResponse>
 }
@@ -89,14 +99,14 @@ export async function uploadPhoto(photo: File, userId?: number): Promise<UploadR
 export type TeamGoal = { title: string; target: number; found: number }
 
 export async function getTeamGoal(): Promise<TeamGoal> {
-  const response = await fetch('/api/team-goal', { cache: 'no-store' })
+  const response = await apiFetch('/api/team-goal', { cache: 'no-store' })
   if (!response.ok) throw new Error(await errorMessage(response, 'Failed to load team goal'))
   return response.json() as Promise<TeamGoal>
 }
 
 
 async function sendJson<T>(url: string, method: string, fallback: string, data?: unknown): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method,
     cache: 'no-store',
     headers: data === undefined ? undefined : { 'Content-Type': 'application/json' },
@@ -106,11 +116,40 @@ async function sendJson<T>(url: string, method: string, fallback: string, data?:
   return response.json() as Promise<T>
 }
 
-export const getUser = (userId: number) =>
-    sendJson<UserProfile>(`/api/users/${userId}`, 'GET', 'Failed to load profile')
+export const getUser = () =>
+    sendJson<UserProfile>('/api/auth/me', 'GET', 'Failed to load profile')
 
-export const passLessonApi = (userId: number, lesson: number) =>
-    sendJson<UserProfile>(`/api/users/${userId}/lessons/${lesson}/pass`, 'POST', 'Failed to save quiz')
+export const passLessonApi = (lesson: number) =>
+    sendJson<UserProfile>(`/api/me/lessons/${lesson}/pass`, 'POST', 'Failed to save quiz')
 
-export const updateSettings = (userId: number, settings: { anonymous?: boolean; shareWithResearchers?: boolean }) =>
-    sendJson<UserProfile>(`/api/users/${userId}/settings`, 'PATCH', 'Failed to save settings', settings)
+export const updateSettings = (settings: { anonymous?: boolean; shareWithResearchers?: boolean }) =>
+    sendJson<UserProfile>('/api/me/settings', 'PATCH', 'Failed to save settings', settings)
+
+export const getLeaderboard = (segment: import('../types').LeaderboardSegment) =>
+    sendJson<import('../types').LeaderboardEntry[]>(
+        `/api/leaderboard?segment=${encodeURIComponent(segment)}`,
+        'GET', 'Failed to load leaderboard')
+
+
+export const logoutUser = () =>
+    sendJson<{ message: string }>('/api/auth/logout', 'POST', 'Could not log out. Please try again.')
+
+
+export const claimGoalRewards = () =>
+    sendJson<UserProfile>('/api/me/goals/claim', 'POST', 'Failed to update goal rewards')
+
+
+export type FriendRequest = { requesterId: number; name: string }
+
+export const getFriendRequests = () =>
+    sendJson<FriendRequest[]>('/api/me/friend-requests', 'GET', 'Failed to load friend requests')
+
+export const sendFriendRequest = (email: string) =>
+    sendJson<{ message: string }>('/api/me/friend-requests', 'POST', 'Failed to send friend request', { email })
+
+export const respondToFriendRequest = (requesterId: number, action: 'accept' | 'decline') =>
+    sendJson<{ message: string }>(`/api/me/friend-requests/${requesterId}`, 'PATCH', 'Failed to respond to friend request', { action })
+
+
+export const getMajors = () =>
+    sendJson<string[]>('/api/majors', 'GET', 'Could not load the major choices. Please try again.')

@@ -26,7 +26,7 @@ export default function MapScreen({ onReport }: { onReport: () => void }) {
         <Header title="Campus sightings" eyebrow="VT LANTERNFLY" />
         <section className="map-card" aria-label="Interactive spotted lanternfly sighting map">
             <div className="map-toolbar">
-                <div><strong>Lanternfly sightings</strong><span>AI detections · awaiting review</span></div>
+                <div><strong>Lanternfly sightings</strong><span>Automatically approved sightings</span></div>
                 <button onClick={refreshMap} aria-label="Refresh map">Refresh ↻</button>
             </div>
             <div style={{height:400,background:'#e5efe5',position:'relative'}}>
@@ -41,10 +41,10 @@ export default function MapScreen({ onReport }: { onReport: () => void }) {
                     Map unavailable. Make sure FastAPI is running on port 8000.
                 </p>}
             </div>
-            <p className="privacy-note">◎ Showing available photo GPS locations. AI detections are not confirmed sightings.</p>
+            <p className="privacy-note">◎ Only approved sightings with photo GPS locations appear.</p>
         </section>
         <section className="stats-card">
-            <div><p>Locally indexed uploads</p><strong>{summary ? `${summary.mapped} mapped sighting${summary.mapped === 1 ? '' : 's'}` : 'Loading map data…'}</strong></div>
+            <div><p>Approved sightings</p><strong>{summary ? `${summary.mapped} mapped sighting${summary.mapped === 1 ? '' : 's'}` : 'Loading map data…'}</strong></div>
             <span className="trend">{summary ? `${summary.uploaded} uploads` : '—'}</span>
         </section>
         <section className="tip-card"><div className="tip-icon"><Icon name="leaf" /></div><div><small>SEASONAL TIP · LATE FALL</small><p>Look for egg masses on tree bark, walls, and outdoor furniture.</p></div></section>

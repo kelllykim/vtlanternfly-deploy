@@ -243,3 +243,13 @@ WHERE r.review_status = 'approved'
   AND r.is_simulated = FALSE
   AND r.lat IS NOT NULL AND r.lng IS NOT NULL
   AND (u.id IS NULL OR u.share_with_researchers = TRUE);
+
+-- One bonus per account, goal, and reward period (ISO Monday or all-time).
+CREATE TABLE IF NOT EXISTS goal_rewards (
+    user_id INT NOT NULL,
+    goal_key VARCHAR(50) NOT NULL,
+    period_key VARCHAR(10) NOT NULL,
+    awarded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, goal_key, period_key),
+    CONSTRAINT fk_goal_reward_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -2,6 +2,7 @@
 @import 'tailwindcss';
 
 :root {
+    --page-gutter: clamp(24px, 4vw, 36px);
     --maroon: #861f41;
     --orange: #e5751f;
     --ink: #202427;
@@ -43,6 +44,6 @@ button:focus-visible, input:focus-visible + i {
 }
 .screen {
     min-height: 100vh;
-    padding: 0 20px 112px;
+    padding: 0 var(--page-gutter) 112px;
     overflow-x: hidden;
 }

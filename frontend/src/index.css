@@ -2,6 +2,7 @@
 @import 'tailwindcss';
 
 :root {
+    --page-gutter: clamp(24px, 4vw, 36px);
     --maroon: #861f41;
     --orange: #e5751f;
     --ink: #202427;
@@ -58,7 +59,7 @@ input:focus-visible + i {
 
 .screen {
     min-height: 100vh;
-    padding: 0 20px 112px;
+    padding: 0 var(--page-gutter) 112px;
     overflow-x: hidden;
 }
 
@@ -377,7 +378,7 @@ input:focus-visible + i {
     border-top: 1px solid #e3e3df;
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    padding: 9px 8px 16px;
+    padding: 9px var(--page-gutter) 16px;
     z-index: 20;
 }
 
@@ -450,7 +451,7 @@ input:focus-visible + i {
     height: 84px;
     display: flex;
     align-items: flex-end;
-    padding: 0 20px 13px;
+    padding: 0 var(--page-gutter) 13px;
     justify-content: space-between;
 }
 
@@ -612,7 +613,7 @@ input:focus-visible + i {
     border-radius: 26px 26px 0 0;
     margin-top: -10px;
     z-index: 2;
-    padding: 16px 20px 22px;
+    padding: 16px var(--page-gutter) 22px;
     min-height: 402px;
 }
 
@@ -1587,7 +1588,7 @@ input:focus-visible + i {
 
 .team-actions {
     display: grid;
-    grid-template-columns: 1.25fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 8px;
     margin-top: 14px;
 }
@@ -2496,4 +2497,223 @@ input:focus-visible + i {
 
 .wf-goal small {
     font-size: 8px;
+}
+
+.account-menu {
+    position: relative;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.account-menu .header-mark {
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+}
+
+.account-menu-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 132px;
+    padding: 6px;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px #20242724;
+    z-index: 60;
+}
+
+.account-menu-panel button {
+    width: 100%;
+    border: 0;
+    border-radius: 8px;
+    padding: 10px 14px;
+    background: white;
+    color: var(--maroon);
+    text-align: left;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.account-menu-panel button:hover,
+.account-menu-panel button:focus-visible {
+    background: #f8edf1;
+}
+
+
+.missing-gps-notice {
+    margin: 16px 0;
+    padding: 14px 16px;
+    border: 1px solid #f2d5bc;
+    border-radius: 14px;
+    background: #fff2e7;
+    color: #783c12;
+    text-align: left;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.missing-gps-notice p {
+    margin: 6px 0 0;
+}
+
+
+/* Shared columns keep counts aligned with headings on mobile. */
+.rank-heading {
+    grid-template-columns: 22px minmax(0, 1fr) 60px 42px;
+    gap: 8px;
+    margin-inline: 11px;
+}
+
+.rank-heading > span:nth-last-child(-n+2) {
+    text-align: center;
+}
+
+.rank-list article {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) 60px 42px;
+    gap: 8px;
+    padding-inline: 10px;
+}
+
+.rank-list article .rank-identity {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.rank-identity .team-avatar {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+}
+
+.rank-identity > div {
+    min-width: 0;
+}
+
+.rank-identity b,
+.rank-identity small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rank-list article > strong {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+
+.friend-form,
+.friend-requests {
+    margin-top: 18px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: white;
+}
+
+.friend-form {
+    display: grid;
+    gap: 12px;
+}
+
+.friend-form label,
+.friend-requests h2 {
+    font-weight: 700;
+    font-size: 15px;
+}
+
+.friend-form input {
+    min-width: 0;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+}
+
+.friend-requests p,
+.friend-feedback {
+    font-size: 13px;
+    margin-top: 10px;
+    overflow-wrap: anywhere;
+}
+
+.friend-error {
+    color: #b91c1c;
+}
+
+.friend-requests article + article {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+}
+
+.friend-request-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.friend-request-actions button {
+    flex: 1;
+    min-height: 42px;
+    margin: 0;
+}
+
+
+.major-select {
+    position: relative;
+    min-width: 0;
+}
+
+.major-select label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.major-select input {
+    width: 100%;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: white;
+}
+
+.major-options {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    max-height: min(240px, 35vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: white;
+    box-shadow: 0 8px 24px #20242724;
+}
+
+.major-options li {
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.major-options li.highlighted,
+.major-options li:hover {
+    background: #f8edf1;
+    color: var(--maroon);
 }

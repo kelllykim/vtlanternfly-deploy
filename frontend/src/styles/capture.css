@@ -10,7 +10,7 @@
     height: 84px;
     display: flex;
     align-items: flex-end;
-    padding: 0 20px 13px;
+    padding: 0 var(--page-gutter) 13px;
     justify-content: space-between;
 }
 
@@ -172,7 +172,7 @@
     border-radius: 26px 26px 0 0;
     margin-top: -10px;
     z-index: 2;
-    padding: 16px 20px 22px;
+    padding: 16px var(--page-gutter) 22px;
     min-height: 402px;
 }
 

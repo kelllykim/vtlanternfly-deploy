@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from "react";
 import {uploadPhoto, UploadResponse} from "@/services/api.ts";
 import Icon from '../components/Icon';
 
-export default function Capture({ userId, onBack, onSuccess }: { userId?: number; onBack: () => void; onSuccess: (res: UploadResponse) => void }) {
+export default function Capture({ onBack, onSuccess }: { onBack: () => void; onSuccess: (res: UploadResponse) => void }) {
     const [photo, setPhoto] = useState<File | null>(null)
     const [preview, setPreview] = useState<string | null>(null)
     const [uploading, setUploading] = useState(false)
@@ -23,7 +23,7 @@ export default function Capture({ userId, onBack, onSuccess }: { userId?: number
         setError(null)
         setResult(null)
         try {
-            const res = await uploadPhoto(photo, userId)
+            const res = await uploadPhoto(photo)
             setResult(res)
             onSuccess(res)
         }
@@ -61,7 +61,7 @@ export default function Capture({ userId, onBack, onSuccess }: { userId?: number
             {error && <p role="alert" style={{color:'#b91c1c',marginTop:12}}>{error}</p>}
             {result && <section aria-live="polite" style={{background:'#fff',borderRadius:14,padding:16,marginTop:16,color:'#1f3329'}}>
                 <strong>Photo received — metadata and detection results</strong>
-                <p style={{fontSize:13,marginTop:8}}>AI predictions are not confirmed sightings. Detected photos with GPS appear on the development map; no points are awarded yet.</p>
+                <p style={{fontSize:13,marginTop:8}}>Approved detections earn points and appear on the map when the photo has GPS coordinates.</p>
                 <div style={{marginTop:12,padding:12,background:'#f0f7f0',borderRadius:8}}>
                     <strong>AI lanternfly detection</strong>
                     {result.detection.status === 'detected' ? <>
@@ -82,14 +82,14 @@ export default function Capture({ userId, onBack, onSuccess }: { userId?: number
                             </button>
                         </div> :
                         <p role="status">Detector unavailable. Metadata was still extracted. Check the backend logs.</p>}
-                    <p style={{fontSize:12}}>Review status: pending. Model predictions require validation before approval.</p>
+                    <p style={{fontSize:12}}>Identification is automatic. Detected lanternflies are approved; other photos receive no points.</p>
                 </div>
                 <p style={{marginTop:8}}>File: {result.metadata.file_name}</p>
                 <p>Captured: {result.metadata.timestamp ?? 'Not available in EXIF'}</p>
                 <p>Location: {result.metadata.latitude !== null && result.metadata.longitude !== null ? `${result.metadata.latitude}, ${result.metadata.longitude} (${result.metadata.location_source})` : 'No GPS coordinates in photo'}</p>
                 <p>Camera: {[result.metadata.camera_make,result.metadata.camera_model].filter(Boolean).join(' ') || 'Unknown'}</p>
                 <p>Resolution: {result.metadata.width} × {result.metadata.height}</p>
-                <p style={{fontSize:12,marginTop:8}}>Saved locally for development. AI-detected photos with GPS appear on the map after refreshing; not linked to an account or database.</p>
+                <p style={{fontSize:12,marginTop:8}}>Reports are saved to your account. Only approved sightings with GPS coordinates appear on the map.</p>
             </section>}
             <p className="gps-note">⌖ Reads existing photo EXIF metadata; no browser location requested.</p>
         </div>
