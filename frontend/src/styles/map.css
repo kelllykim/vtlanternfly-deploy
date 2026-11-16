@@ -272,56 +272,85 @@
 }
 
 /* =========================================================================
-   Map screen layout: square map on the left, sightings + Report on the right
+   Map screen layout: big map, small sightings box above it, Report button
+   floating over the bottom of the map
    -------------------------------------------------------------------------
-   Fits on one screen (no scrolling) on phones and desktop. The square map's
-   size is the smaller of ~58% of the width or the height left on screen.
+   Fits on one screen (no scrolling) on phones and desktop. The map fills all
+   the height that's left. The Report button sits in the same grid cell as the
+   map, on top of it, so it stays put while the map is dragged or zoomed (the
+   map moves inside its iframe; the button is outside it).
    Rules are scoped to .map-screen so they win over the duplicate map styles
    in index.css (which loads after this file).
    ========================================================================= */
 .screen.map-screen {
-    /* vertical space used by everything except the square map itself:
-       header + toolbar + privacy note + tip + gaps + bottom nav */
-    --map-chrome: 360px;
-    min-height: 0;               /* size to the content: the map decides the height */
-    max-height: 100vh;           /* fallback for older browsers */
-    max-height: 100dvh;          /* phones: excludes the browser's address bar */
+    height: 100vh;               /* fallback for older browsers */
+    height: 100dvh;              /* phones: excludes the browser's address bar */
+    min-height: 0;
     display: grid;
-    grid-template-columns:
-        clamp(150px, min(58%, calc(100dvh - var(--map-chrome))), 560px)
-        minmax(0, 1fr);
-    grid-template-rows: auto auto 1fr auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
     grid-template-areas:
-        "header header"
-        "map    stats"
-        "map    report"
-        "tip    tip";
-    align-content: start;
-    gap: 12px;
+        "header"
+        "stats"
+        "map";
+    gap: 10px;
+    /* room for the fixed bottom nav (84px) plus the iPhone home bar */
     padding-bottom: calc(84px + 12px + env(safe-area-inset-bottom, 0px));
-    overflow-y: auto;            /* safety net on very small screens only */
+    overflow: hidden;
 }
 
 .map-screen .page-header {
     grid-area: header;
     height: auto;
-    padding: 14px 0 4px;
+    padding: 14px 0 2px;
     margin-bottom: 0;
 }
 
-/* ---- Square map card (left) ---- */
+/* ---- Small sightings box above the map ---- */
+.map-screen .stats-card {
+    grid-area: stats;
+    margin-top: 0;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-radius: 16px;
+}
+
+.map-screen .stats-card p {
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-weight: 800;
+    color: var(--maroon);
+    margin: 0 0 2px;
+}
+
+.map-screen .stats-card strong {
+    display: block;
+    font: 800 16px/1.2 Manrope, sans-serif;
+    color: var(--ink);
+}
+
+.map-screen .trend {
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+/* ---- Map card fills the rest of the screen ---- */
 .map-screen .map-card {
     grid-area: map;
-    align-self: start;
     display: flex;
     flex-direction: column;
-    min-width: 0;
+    min-height: 0;
     overflow: hidden;
 }
 
 .map-screen .map-toolbar {
     height: auto;
-    padding: 9px 10px 9px 12px;
+    padding: 9px 10px 9px 14px;
     gap: 8px;
     flex: 0 0 auto;
 }
@@ -330,105 +359,56 @@
     font-size: 13px;
 }
 
-.map-screen .map-toolbar button {
+.map-screen .map-toolbar button,
+.map-screen .map-expand-button {
     flex: 0 0 auto;
     white-space: nowrap;
 }
 
-/* The map itself: always square */
 .map-screen .map-card > div:not(.map-toolbar) {
-    width: 100%;
-    aspect-ratio: 1 / 1;
+    flex: 1 1 auto;
+    min-height: 0;
     height: auto;
 }
 
 .map-screen .privacy-note {
     height: auto;
-    padding: 6px 10px;
+    padding: 6px 12px;
+    flex: 0 0 auto;
     text-align: center;
     line-height: 1.35;
 }
 
-/* ---- Sightings count (top right) ---- */
-.map-screen .stats-card {
-    grid-area: stats;
-    margin-top: 0;
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 10px;
-    background: linear-gradient(160deg, #ffffff 0%, #f7f3ee 100%);
-}
-
-.map-screen .stats-card p {
-    font-size: 10px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    font-weight: 800;
-    color: var(--maroon);
-    margin: 0 0 4px;
-}
-
-.map-screen .stats-card strong {
-    display: block;
-    font: 800 clamp(16px, 2.6vw, 24px) / 1.2 Manrope, sans-serif;
-    color: var(--ink);
-}
-
-.map-screen .trend {
-    font-size: 11px;
-}
-
-/* ---- Report button (fills the rest of the right column) ---- */
+/* ---- Report button floating over the bottom of the map ---- */
 .map-screen .report-button {
-    grid-area: report;
-    margin-top: 0;
-    min-height: 110px;
-    height: 100%;
-    flex-direction: column;
-    gap: 10px;
-    padding: 16px 12px;
-    border-radius: 20px;
-    font-size: clamp(14px, 2.2vw, 18px);
-    line-height: 1.25;
-    text-align: center;
+    grid-area: map;              /* same cell as the map, drawn on top */
+    align-self: end;
+    justify-self: center;
+    z-index: 5;
+    width: auto;
+    min-width: min(260px, 80%);
+    min-height: 52px;
+    margin: 0 0 40px;            /* sits just above the privacy note */
+    padding: 0 26px;
+    border-radius: 999px;
+    font-size: 15px;
     background: linear-gradient(160deg, #9c2a50 0%, var(--maroon) 55%, #6d1934 100%);
-    box-shadow: 0 10px 26px #861f4140;
+    box-shadow: 0 10px 28px #861f4155, 0 2px 6px #0002;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.map-screen .report-button svg {
-    width: 34px;
-    height: 34px;
-    padding: 9px;
-    box-sizing: content-box;
-    border-radius: 50%;
-    background: #ffffff26;
 }
 
 .map-screen .report-button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 14px 30px #861f4150;
+    box-shadow: 0 14px 32px #861f4166, 0 2px 6px #0002;
 }
 
 .map-screen .report-button:active {
     transform: translateY(0);
 }
 
-/* ---- Seasonal tip (full width under both columns) ---- */
+/* Not enough room for the tip on this screen */
 .map-screen .tip-card {
-    grid-area: tip;
-    margin-top: 0;
-    padding: 10px 12px;
-    align-items: center;
-}
-
-.map-screen .tip-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 10px;
+    display: none;
 }
 
 /* ---- Expanded map (the Expand button in MapScreen.tsx toggles the class
@@ -444,8 +424,8 @@
 
 .map-screen .map-card.is-expanded {
     position: fixed;
-    z-index: 60;                 /* above the sticky header */
-    align-self: stretch;         /* let top + bottom set its height */
+    z-index: 60;                 /* above the sticky header and the Report button */
+    align-self: stretch;
     top: 12px;
     left: 50%;
     transform: translateX(-50%);
@@ -455,105 +435,30 @@
     box-shadow: 0 0 0 100vmax #2024274d, 0 20px 60px #20242740;
 }
 
-.map-screen .map-card.is-expanded > div:not(.map-toolbar) {
-    flex: 1 1 auto;
-    aspect-ratio: auto;
-    min-height: 0;
-}
-
-/* ---- Phones: tighter text in the narrow columns ---- */
+/* ---- Phones ---- */
 @media (max-width: 479px) {
-    .screen.map-screen {
-        --map-chrome: 330px;
-        gap: 10px;
-    }
     .map-screen .map-toolbar span {
-        display: none;           /* hide the subtitle so the title fits */
+        display: none;           /* hide the subtitle so the title and buttons fit */
     }
-    /* narrow map card: title on one row, Expand + Refresh on the next */
-    .map-screen .map-toolbar {
-        flex-wrap: wrap;
-        row-gap: 6px;
-    }
-    .map-screen .map-toolbar > div:first-child {
-        flex: 1 1 100%;
-    }
-    .map-screen .map-card:not(.is-expanded) .map-toolbar > div:last-child {
-        flex: 1 1 100%;
-    }
-    .map-screen .map-card:not(.is-expanded) .map-toolbar > div:last-child > button {
-        flex: 1 1 0;
-    }
-    .map-screen .map-card.is-expanded .map-toolbar {
-        flex-wrap: nowrap;
-    }
-    .map-screen .map-card.is-expanded .map-toolbar > div:first-child {
-        flex: 1 1 auto;
-    }
-    .map-screen .stats-card {
-        padding: 12px;
-    }
-    .map-screen .stats-card p {
-        font-size: 9px;
-    }
-    .map-screen .report-button {
-        padding: 12px 8px;
-    }
-    .map-screen .report-button svg {
-        width: 26px;
-        height: 26px;
-        padding: 8px;
+    .map-screen .stats-card strong {
+        font-size: 15px;
     }
 }
 
-/* ---- Short screens (small phones): drop the tip to give the map room ---- */
-@media (max-height: 640px) {
+/* ---- Short screens (small phones turned sideways) ---- */
+@media (max-height: 480px) {
     .screen.map-screen {
-        --map-chrome: 270px;
-        grid-template-rows: auto auto 1fr;
-        grid-template-areas:
-            "header header"
-            "map    stats"
-            "map    report";
-    }
-    .map-screen .tip-card {
-        display: none;
+        gap: 6px;
+        padding-bottom: calc(84px + 6px + env(safe-area-inset-bottom, 0px));
     }
     .map-screen .page-header {
-        padding: 10px 0 2px;
-    }
-}
-
-/* ---- Very short screens (phones turned sideways) ---- */
-@media (max-height: 440px) {
-    .screen.map-screen {
-        --map-chrome: 280px;
-        grid-template-columns:
-            clamp(100px, min(58%, calc(100dvh - var(--map-chrome))), 560px)
-            minmax(0, 1fr);
-        gap: 8px;
-        padding-bottom: calc(84px + 8px + env(safe-area-inset-bottom, 0px));
+        display: none;           /* the bottom nav already shows you're on Map */
     }
     .map-screen .privacy-note {
         display: none;
     }
-    .map-screen .map-toolbar span {
-        display: none;
-    }
-    .map-screen .page-header h1 {
-        font-size: 17px;
-    }
-    .map-screen .stats-card {
-        padding: 8px 12px;
-        gap: 6px;
-    }
     .map-screen .report-button {
-        min-height: 56px;
-        flex-direction: row;
-    }
-    .map-screen .report-button svg {
-        width: 22px;
-        height: 22px;
-        padding: 6px;
+        margin-bottom: 12px;
+        min-height: 44px;
     }
 }
