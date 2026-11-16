@@ -188,13 +188,19 @@ def _goal_progress(db: Session, user_id: int) -> list[dict]:
             for key, label, target, count, period in definitions]
 
 
-def _award_goal_rewards(db: Session, user_id: int) -> int:
+def _award_goal_rewards(db: Session, user_id: int, goal_key: str, period: str) -> int:
     """Unique goal/period records keep bonuses idempotent, including concurrent requests."""
     db.flush()
     awarded = 0
     for goal in _goal_progress(db, user_id):
-        if not goal["completed"] or goal["rewarded"]:
+        if goal["key"] != goal_key:
             continue
+        if goal["period"] != period:
+            raise HTTPException(status_code=409, detail="This goal period has ended. Refresh your goals.")
+        if goal["rewarded"]:
+            return 0
+        if not goal["completed"]:
+            raise HTTPException(status_code=400, detail="Complete this goal before claiming its points.")
         try:
             with db.begin_nested():
                 db.add(GoalReward(user_id=user_id, goal_key=goal["key"], period_key=goal["period"]))
@@ -202,14 +208,20 @@ def _award_goal_rewards(db: Session, user_id: int) -> int:
                 db.add(PointEvent(user_id=user_id, points=10, reason=f"Goal completed: {goal['label']}"))
         except IntegrityError:
             # A simultaneous request already awarded this goal for this period.
-            continue
+            return 0
         awarded += 10
-    return awarded
+        return awarded
+    raise HTTPException(status_code=404, detail="Goal not found")
+
+
+class GoalClaim(BaseModel):
+    goal_key: Literal["report_3", "egg_mass", "quiz", "invite"]
+    period: str = Field(max_length=10)
 
 
 @app.post("/api/me/goals/claim")
-def claim_goals(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _award_goal_rewards(db, user.id)
+def claim_goals(claim: GoalClaim, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _award_goal_rewards(db, user.id, claim.goal_key, claim.period)
     db.commit()
     return _user_profile(db, user)
 
@@ -553,7 +565,6 @@ def _save_report(record: dict, detection: dict, user_id: int | None, life_stage:
                 db.add(PointEvent(user_id=user_id, report_id=report.id, points=points,
                                   reason=f"Verified report: {stage}"))
                 _award_badges(db, user_id)
-                points += _award_goal_rewards(db, user_id)
             db.commit()
             result.update(report_id=report.id, review_status=report.review_status,
                           life_stage=stage if confident else None, points_awarded=points)
@@ -850,7 +861,6 @@ def pass_lesson(lesson_index: int, user: User = Depends(get_current_user), db: S
         db.add(PointEvent(user_id=user_id, lesson_id=lesson_index, points=QUIZ_POINTS,
                           reason=f"Passed lesson {lesson_index + 1}"))
         _award_badges(db, user_id)
-        _award_goal_rewards(db, user_id)
         db.commit()
     return _user_profile(db, user)
 

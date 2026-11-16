@@ -135,8 +135,8 @@ export const logoutUser = () =>
     sendJson<{ message: string }>('/api/auth/logout', 'POST', 'Could not log out. Please try again.')
 
 
-export const claimGoalRewards = () =>
-    sendJson<UserProfile>('/api/me/goals/claim', 'POST', 'Failed to update goal rewards')
+export const claimGoalRewards = (goalKey: string, period: string) =>
+    sendJson<UserProfile>('/api/me/goals/claim', 'POST', 'Failed to claim goal points', { goal_key: goalKey, period })
 
 
 export type FriendRequest = { requesterId: number; name: string }

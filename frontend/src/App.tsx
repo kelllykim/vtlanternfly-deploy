@@ -58,11 +58,17 @@ export default function App() {
   useEffect(() => {
     if (view !== 'me' || !currentUserId) return
     let cancelled = false
-    claimGoalRewards().then(user => {
+    getUser().then(user => {
       if (!cancelled) setCurrentUser(user)
     }).catch(console.error)
     return () => { cancelled = true }
   }, [view, currentUserId])
+
+  const claimGoal = async (key: string, period: string) => {
+    const version = sessionVersion.current
+    const user = await claimGoalRewards(key, period)
+    if (sessionVersion.current === version) setCurrentUser(user)
+  }
 
   // auto-advance verifying screen after 2 seconds
   useEffect(() => {
@@ -155,7 +161,7 @@ export default function App() {
             {view === 'result' && <ResultScreen outcome={outcome} stage={stage} points={pointsAwarded} missingGps={missingGps} duplicate={duplicate} onDone={done} onLearn={resultLearn} onTeam={resultTeam} onRetake={()=>setView('capture')}/>}
             {view === 'learn' && <LearnScreen passedLessons={currentUser.passedLessons} passLesson={passLesson}/>}
             {view === 'teams' && <TeamsScreen userId={currentUser.id}/>}
-            {view === 'me' && <ProfileScreen user={currentUser} onUpdateSettings={handleUpdateSettings} onHistory={() => { setView('history'); window.scrollTo(0, 0) }}/>}
+            {view === 'me' && <ProfileScreen user={currentUser} onUpdateSettings={handleUpdateSettings} onClaimGoal={claimGoal} onHistory={() => { setView('history'); window.scrollTo(0, 0) }}/>}
             {view === 'history' && <HistoryScreen userId={currentUser.id} onBack={() => { setTab('me'); window.scrollTo(0, 0) }}/>}
 
             {(['map','learn','teams','me'] as string[]).includes(view) && <BottomNav tab={tab} setTab={setTab}/>}

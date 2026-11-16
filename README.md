@@ -155,15 +155,19 @@ Acceptance adds both accounts to each other’s Friends rankings. No email is se
 memberships are reflected in the Teams rankings.
 
 Report points are 10 for adults/nymphs and 15 for egg masses. Passed quizzes award
-10 points once per lesson. Each completed profile goal awards an additional 10 points:
+10 points once per lesson. Each completed profile goal offers 10 points to claim:
 
 - Three approved reports: once per week, Monday–Sunday UTC.
 - First approved egg-mass report: once per account.
 - First passed quiz: once per account.
 - First recruited account: once per account, based on `users.invited_by`.
 
-Goal rewards are recorded uniquely to prevent repeat awards. Opening the profile
-also awards eligible bonuses for existing activity. Adding an existing friend does
+Press **Claim +10 points** beside a completed goal in the profile Goals section to
+add its reward to the account. Uploading, passing a quiz, and opening the profile
+do not automatically claim goal bonuses. Previously awarded bonuses stay claimed.
+Weekly bonuses must be claimed before the week ends (Monday–Sunday UTC).
+Goal rewards are recorded uniquely to prevent repeat awards, including repeated
+or simultaneous clicks. Adding an existing friend does
 not recruit a new account; the recruitment interface is not implemented yet.
 
 The official major catalog is versioned in `backend/data/vt_majors.json`, sourced

@@ -1,9 +1,25 @@
 import Header from '../components/Header';
+import { useState } from 'react';
 import Icon from '../components/Icon';
 import type { UserProfile } from '../types.tsx';
 import '../styles/features.css';
 
-export default function ProfileScreen({ user, onUpdateSettings, onHistory }: { user: UserProfile; onUpdateSettings: (key: string, val: boolean) => void; onHistory: () => void }) {
+export default function ProfileScreen({ user, onUpdateSettings, onHistory, onClaimGoal }: { user: UserProfile; onUpdateSettings: (key: string, val: boolean) => void; onHistory: () => void; onClaimGoal: (key: string, period: string) => Promise<void> }) {
+    const [claiming, setClaiming] = useState<string | null>(null)
+    const [claimError, setClaimError] = useState<string | null>(null)
+    const [claimMessage, setClaimMessage] = useState<string | null>(null)
+    const claim = async (goal: UserProfile['goals'][number]) => {
+        if (claiming) return
+        setClaiming(goal.key)
+        setClaimError(null)
+        setClaimMessage(null)
+        try {
+            await onClaimGoal(goal.key, goal.period)
+            setClaimMessage(`Claimed +${goal.points} points for ${goal.label}.`)
+        } catch (err) {
+            setClaimError(err instanceof Error ? err.message : 'Could not claim points. Please try again.')
+        } finally { setClaiming(null) }
+    }
     const hasBadge = user.passedLessons.length === 3
     const badgeList: [string, string, boolean][] = [
         ['Field Expert', 'trophy', hasBadge || user.badges.includes('Field Expert')],
@@ -82,9 +98,18 @@ export default function ProfileScreen({ user, onUpdateSettings, onHistory }: { u
             <div key={goal.key} className={goal.completed ? 'complete' : ''}>
                 <span>{goal.completed ? <Icon name="check" size={16}/> : ''}</span>
                 <b>{goal.label}</b>
-                <small>{goal.current}/{goal.target}<span style={{ marginInline: '8px', fontSize: '20px', verticalAlign: 'middle' }}>·</span>{goal.rewarded ? '+10 earned' : '+10 pts'}</small>
+                <div className="goal-reward">
+                    <small>{goal.current}/{goal.target} · {goal.rewarded ? `+${goal.points} claimed` : `+${goal.points} pts`}</small>
+                    {goal.completed && !goal.rewarded && <button type="button" className="goal-claim"
+                        disabled={claiming !== null} onClick={() => void claim(goal)}
+                        aria-label={`Claim ${goal.points} points for ${goal.label}`}>
+                        {claiming === goal.key ? 'Claiming…' : `Claim +${goal.points} points`}
+                    </button>}
+                </div>
             </div>)}
         </section>
+        {claimError && <p role="alert" className="goal-feedback">{claimError}</p>}
+        {claimMessage && <p role="status" className="goal-feedback">{claimMessage}</p>}
 
         <div className="section-title">
             <div><small>SETTINGS</small><h2>Privacy</h2></div></div>
