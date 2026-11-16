@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from "react";
 import {uploadPhoto, UploadResponse} from "@/services/api.ts";
 import Icon from '../components/Icon';
+import '../styles/capture.css';
 
 export default function Capture({ onBack, onSuccess }: { onBack: () => void; onSuccess: (res: UploadResponse) => void }) {
     const [photo, setPhoto] = useState<File | null>(null)
@@ -47,16 +48,27 @@ export default function Capture({ onBack, onSuccess }: { onBack: () => void; onS
                 <Icon name="arrow" />
             </button><strong>Photograph sighting</strong><span />
         </div>
-        <div className="viewfinder">
-            {preview ? <img src={preview} alt="Selected sighting" style={{width:'100%',height:'100%',objectFit:'contain'}} /> :
-                <div className="forest-bg"><div className="tree"/><div className="bug"><i/><i/><b/></div></div>}
-            {!preview && <div className="focus-frame"><span/><span/><span/><span/></div>}
-            <p>{preview ? 'Selected photograph' : 'Choose a photograph to check for lanternflies'}</p>
+        <input ref={fileInputRef} id="photo-upload" type="file" hidden aria-label="Select a lanternfly photo"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,.mpo" disabled={uploading}
+            onChange={e=>{if (e.target.files?.[0]) {setPhoto(e.target.files[0]);setResult(null);setError(null)}}} />
+        <div className={`viewfinder${photo ? '' : ' photo-picker-empty'}`}>
+            {preview ? <>
+                <img src={preview} alt="Selected sighting" style={{width:'100%',height:'100%',objectFit:'contain'}} />
+                <p>Selected photograph</p>
+            </> : <button type="button" className="photo-picker" onClick={() => fileInputRef.current?.click()}>
+                <span className="photo-picker-icon" aria-hidden="true"><Icon name="camera" size={32}/></span>
+                <strong>Choose a photo</strong>
+                <span>Tap to open your photos or camera</span>
+                <small>JPG, PNG, WebP, HEIC or MPO · Up to 15 MB</small>
+            </button>}
         </div>
         <div className="capture-panel">
+            {photo && <div className="selected-photo">
+                <p role="status"><strong>Photo selected</strong><span>{photo.name}</span></p>
+                <button type="button" className="change-photo" disabled={uploading}
+                    onClick={() => fileInputRef.current?.click()}>Change photo</button>
+            </div>}
             <div className="safety"><strong>!</strong><p><b>Stay safe</b><br/>Stay on sidewalks. Never climb or step into roads.</p></div>
-            <label htmlFor="photo-upload">Upload a lanternfly photo</label>
-            <input ref={fileInputRef} id="photo-upload" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,.mpo" onChange={e=>{setPhoto(e.target.files?.[0] ?? null);setResult(null);setError(null)}} style={{display:'block',width:'100%',margin:'12px 0',color:'#1f3329'}} />
             <button className="capture-button" disabled={!photo || uploading} onClick={submit}><span><Icon name="camera" /></span>{uploading ? 'Uploading...' : 'Upload & check photo'}</button>
             {error && <p role="alert" style={{color:'#b91c1c',marginTop:12}}>{error}</p>}
             {result && <section aria-live="polite" style={{background:'#fff',borderRadius:14,padding:16,marginTop:16,color:'#1f3329'}}>

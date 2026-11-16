@@ -1,7 +1,7 @@
 .capture-screen {
-    background: #101715;
+    background: var(--paper);
     min-height: 100vh;
-    color: white;
+    color: var(--ink);
     display: flex;
     flex-direction: column;
 }
@@ -15,8 +15,8 @@
 }
 
 .camera-top button {
-    background: #ffffff20;
-    color: white;
+    background: #e9e9e4;
+    color: var(--ink);
     box-shadow: none;
 }
 
@@ -28,6 +28,7 @@
     height: 368px;
     position: relative;
     overflow: hidden;
+    background: var(--paper);
 }
 
 .forest-bg {
@@ -37,6 +38,37 @@
     linear-gradient(120deg, #1f3c31, #758266 50%, #202d28);
     filter: saturate(0.8);
 }
+
+.viewfinder.photo-picker-empty { height: auto; padding: 20px var(--page-gutter) 30px; }
+.photo-picker {
+    width: 100%;
+    min-height: 250px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px 16px;
+    border: 0;
+    border-radius: 20px;
+    background: white;
+    color: var(--ink);
+    box-shadow: 0 3px 16px #2633280a;
+    cursor: pointer;
+    text-align: center;
+}
+.photo-picker:hover { background: #f0eee8; }
+.photo-picker strong { font-size: 23px; font-weight: 800; }
+.photo-picker > span:not(.photo-picker-icon) { font-size: 14px; }
+.photo-picker small { font-size: 12px; color: #6e5b51; }
+.photo-picker-icon { width: 64px; height: 64px; border-radius: 50%; background: var(--maroon); color: white; display: grid; place-items: center; }
+.selected-photo { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.selected-photo p { min-width: 0; margin: 0; font-size: 13px; }
+.selected-photo strong, .selected-photo p span { display: block; }
+.selected-photo p span { overflow-wrap: anywhere; margin-top: 4px; color: var(--muted); }
+.change-photo { flex-shrink: 0; border: 0; background: #efe6e9; color: var(--maroon); border-radius: 10px; padding: 12px; font-weight: 700; cursor: pointer; }
+.photo-picker:focus-visible, .change-photo:focus-visible { outline: 3px solid #e5751f; outline-offset: 4px; }
+.change-photo:disabled { opacity: 0.6; cursor: wait; }
 
 .tree {
     position: absolute;
@@ -163,7 +195,10 @@
     right: 0;
     text-align: center;
     font-size: 12px;
-    text-shadow: 0 2px 4px black;
+    color: var(--ink);
+    background: #f5f5f2ed;
+    margin: 0;
+    padding: 8px;
 }
 
 .capture-panel {
