@@ -295,10 +295,7 @@ def _user_profile(db: Session, user: User) -> dict:
         },
         "anonymous": user.anonymous,
         "shareWithResearchers": user.share_with_researchers,
-        "badges": list(db.scalars(
-            select(Badge.name).join(UserBadge, UserBadge.badge_id == Badge.id)
-            .where(UserBadge.user_id == user.id)
-        )),
+        "badges": _profile_badges(db, user.id),
         "goals": _goal_progress(db, user.id),
         "passedLessons": list(db.scalars(
             select(QuizPass.lesson_index).where(QuizPass.user_id == user.id)
@@ -484,9 +481,22 @@ BADGE_RULES = {  # badge name -> minimum verified reports
 }
 
 
-def _award_badges(db: Session, user_id: int) -> None:
-    """Give the user any badges they've newly earned. Call before db.commit()."""
-    db.flush()  # make reports/quiz passes added in this session visible to the queries below
+def _has_three_day_streak(uploads) -> bool:
+    """A past qualifying streak remains an achievement after the current streak ends."""
+    campus_timezone = ZoneInfo("America/New_York")
+    days = sorted({date.replace(tzinfo=timezone.utc).astimezone(campus_timezone).date() for date in uploads})
+    consecutive = 0
+    previous = None
+    for day in days:
+        consecutive = consecutive + 1 if previous is not None and day == previous + timedelta(days=1) else 1
+        if consecutive >= 3:
+            return True
+        previous = day
+    return False
+
+
+def _earned_badge_names(db: Session, user_id: int) -> set[str]:
+    """Derive achievements even for reports created before badge awards were stored."""
     approved = select(func.count(Report.id)).where(
         Report.user_id == user_id, Report.review_status == "approved"
     )
@@ -499,8 +509,12 @@ def _award_badges(db: Session, user_id: int) -> None:
     quizzes = db.scalar(select(func.count()).select_from(QuizPass).where(QuizPass.user_id == user_id))
 
     earned = {name for name, needed in BADGE_RULES.items() if total >= needed}
-    if "Egg mass" in stages:
-        earned.add("Egg Hunter")
+    uploaded_at = db.scalars(select(Report.created_at).where(
+        Report.user_id == user_id, Report.review_status == "approved",
+        Report.created_at <= datetime.now(timezone.utc).replace(tzinfo=None),
+    ))
+    if _has_three_day_streak(uploaded_at):
+        earned.add("On a Roll")
     if stages & {"Black nymph", "Red nymph"}:
         earned.add("Nymph Spotter")
     if {"Egg mass", "Black nymph", "Red nymph", "Adult"} <= stages:
@@ -508,6 +522,46 @@ def _award_badges(db: Session, user_id: int) -> None:
     if quizzes >= LESSON_COUNT:
         earned.add("Field Expert")
 
+    major = db.scalar(select(User.major).where(User.id == user_id))
+    if major and major.strip():
+        friend_ids = select(Friendship.addressee_id).where(
+            Friendship.requester_id == user_id, Friendship.status == "accepted"
+        ).union(select(Friendship.requester_id).where(
+            Friendship.addressee_id == user_id, Friendship.status == "accepted"
+        ))
+        if db.scalar(select(User.id).where(
+            User.id.in_(friend_ids), User.id != user_id,
+            func.lower(func.trim(User.major)) == major.strip().lower(),
+        ).limit(1)) is not None:
+            earned.add("Major Mate")
+
+    return earned
+
+
+def _profile_badges(db: Session, user_id: int) -> list[str]:
+    saved = set(db.scalars(
+        select(Badge.name).join(UserBadge, UserBadge.badge_id == Badge.id)
+        .where(UserBadge.user_id == user_id)
+    ))
+    return sorted((saved - {"Recruiter", "Egg Hunter"}) | _earned_badge_names(db, user_id))
+
+
+def _award_badges(db: Session, user_id: int) -> None:
+    """Give the user any badges they've newly earned. Call before db.commit()."""
+    db.flush()
+    earned = _earned_badge_names(db, user_id)
+    for name, description, icon in [
+        ("Major Mate", "Add one accepted friend who shares your major.", "users"),
+        ("On a Roll", "Upload an approved lanternfly sighting on three consecutive days.", "flame"),
+    ]:
+        if name in earned and db.scalar(select(Badge.id).where(Badge.name == name)) is None:
+            try:
+                with db.begin_nested():
+                    db.add(Badge(name=name, description=description, icon=icon))
+                    db.flush()
+            except IntegrityError:
+                # A concurrent request may have created the shared catalog entry.
+                pass
     already = set(db.scalars(select(UserBadge.badge_id).where(UserBadge.user_id == user_id)))
     for badge in db.scalars(select(Badge).where(Badge.name.in_(earned))):
         if badge.id not in already:
@@ -745,6 +799,9 @@ def respond_friend_request(requester_id: int, data: FriendRequestResponse,
     if friendship.status != "pending" and friendship.status != status:
         raise HTTPException(status_code=409, detail="This request has already been answered")
     friendship.status = status
+    if status == "accepted":
+        _award_badges(db, user.id)
+        _award_badges(db, requester_id)
     db.commit()
     return {"message": "Friend request accepted" if status == "accepted" else "Friend request declined"}
 
@@ -842,6 +899,18 @@ def _get_user_or_404(db: Session, user_id: int) -> User:
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return user
+
+
+@app.get("/api/users/{user_id}/public-profile")
+def public_profile(user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    user = _get_user_or_404(db, user_id)
+    return {
+        "displayName": "Anonymous Hokie" if user.anonymous else user.display_name,
+        "major": user.major,
+        "points": _user_points(db, user.id),
+        "streak": _upload_streak(db, user.id),
+        "badges": _profile_badges(db, user.id),
+    }
 
 
 @app.get("/api/users/{user_id}")

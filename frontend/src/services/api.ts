@@ -119,6 +119,10 @@ async function sendJson<T>(url: string, method: string, fallback: string, data?:
 export const getUser = () =>
     sendJson<UserProfile>('/api/auth/me', 'GET', 'Failed to load profile')
 
+export type PublicProfile = { displayName: string; major: string | null; points: number; streak: number; badges: string[] }
+export const getPublicProfile = (userId: number) =>
+    sendJson<PublicProfile>(`/api/users/${userId}/public-profile`, 'GET', 'Could not load this profile')
+
 export const passLessonApi = (lesson: number) =>
     sendJson<UserProfile>(`/api/me/lessons/${lesson}/pass`, 'POST', 'Failed to save quiz')
 

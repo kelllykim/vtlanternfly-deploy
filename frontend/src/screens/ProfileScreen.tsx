@@ -24,8 +24,8 @@ export default function ProfileScreen({ user, onUpdateSettings, onHistory, onCla
     const badgeList: [string, string, boolean][] = [
         ['Field Expert', 'trophy', hasBadge || user.badges.includes('Field Expert')],
         ['First Squash', 'check', user.reportsTotal > 0 || user.badges.includes('First Squash')],
-        ['Recruiter', 'users', user.badges.includes('Recruiter')],
-        ['Egg Hunter', 'leaf', user.eggFound || user.badges.includes('Egg Hunter')],
+        ['Major Mate', 'users', user.badges.includes('Major Mate')],
+        ['On a Roll', 'flame', user.badges.includes('On a Roll')],
     ]
     const earnedCount = badgeList.filter(([, , on]) => on).length
 
@@ -60,7 +60,7 @@ export default function ProfileScreen({ user, onUpdateSettings, onHistory, onCla
             <div>
                 <small>ACHIEVEMENTS</small>
                 <h2>Badges</h2></div><span>{earnedCount} of {badgeList.length}</span></div>
-        <div className="badge-grid">{badgeList.map(([n,ic,on]) => <article className={on ? 'earned':'locked'} key={String(n)}><div><Icon name={String(ic)}/></div><b>{n}</b><small>{on ? 'Earned' : 'Locked'}</small></article>)}</div>
+        <div className="badge-grid">{badgeList.map(([n,ic,on]) => <article className={on ? 'earned':'locked'} key={String(n)}><div><Icon name={String(ic)}/></div><b>{n}</b><small>{on ? 'Earned' : 'Locked'}</small>{n === 'Field Expert' && <small>Pass all three field guide quizzes.</small>}{n === 'First Squash' && <small>Submit your first approved lanternfly sighting.</small>}{n === 'On a Roll' && <small>Upload an approved lanternfly sighting on three consecutive days.</small>}{n === 'Major Mate' && <small>Add one friend in your major. Their request must be accepted.</small>}</article>)}</div>
         <section className="learn-progress-card">
             <div>
                 <small>LEARN PROGRESS</small>

@@ -1,11 +1,13 @@
 import {useEffect, useState} from "react";
 import Header from '../components/Header';
+import PlayerProfile from '../components/PlayerProfile';
 import Icon from '../components/Icon';
 import '../styles/features.css';
 import type { LeaderboardEntry, LeaderboardSegment } from '../types';
 import { getLeaderboard, getTeamGoal, getFriendRequests, sendFriendRequest, respondToFriendRequest, type FriendRequest, type TeamGoal } from '../services/api';
 
 export default function Teams({ userId }: { userId: number }) {
+    const [selectedPlayer, setSelectedPlayer] = useState<number | null>(null)
     const [segment, setSegment] = useState<LeaderboardSegment>('Campus')
     const [teamsData, setTeamsData] = useState<LeaderboardEntry[]>([])
     const [teamGoal, setTeamGoal] = useState<TeamGoal | null>(null)
@@ -92,6 +94,8 @@ export default function Teams({ userId }: { userId: number }) {
     const target = teamGoal?.target ?? 50
     const found = teamGoal?.found ?? 0
 
+    if (selectedPlayer !== null) return <PlayerProfile key={selectedPlayer} userId={selectedPlayer} onBack={() => setSelectedPlayer(null)} />
+
     return <main className="screen teams-screen">
         <Header title="Leaderboard" eyebrow="TOGETHER, WE SPOT MORE" />
         <div className="segments">
@@ -115,7 +119,10 @@ export default function Teams({ userId }: { userId: number }) {
             {teamsData.map((team, i) => (
                 <article className={team.isCurrentUser ? 'is-me' : ''} key={team.id}>
                     <span className={`rank rank-${i}`}>{team.rank}</span>
-                    <div className="rank-identity"><span className="team-avatar">{team.name[0]}</span>
+                    <div className="rank-identity">{segment === 'Friends' || segment === 'Campus' ?
+                        <button type="button" className="team-avatar player-profile-button" aria-label={`View ${team.name}'s profile`}
+                            onClick={() => { setSelectedPlayer(Number(team.id)); window.scrollTo(0, 0) }}>{team.name[0]}</button>
+                        : <span className="team-avatar">{team.name[0]}</span>}
                     <div>
                         <span className="leaderboard-name"><b>{team.name}</b>
                             {(segment === 'Friends' || segment === 'Campus') && team.streak !== undefined &&

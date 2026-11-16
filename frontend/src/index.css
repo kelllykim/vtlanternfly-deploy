@@ -2511,6 +2511,18 @@ input:focus-visible + i {
     flex-shrink: 0;
 }
 
+.player-profile-button {
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+}
+
+.player-profile-button:focus-visible {
+    outline: 2px solid var(--maroon);
+    outline-offset: 3px;
+}
+
 .account-menu .header-mark {
     width: 74px;
     height: 74px;
