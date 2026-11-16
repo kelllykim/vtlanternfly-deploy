@@ -54,7 +54,6 @@ export default function Capture({ onBack, onSuccess }: { onBack: () => void; onS
         <div className={`viewfinder${photo ? '' : ' photo-picker-empty'}`}>
             {preview ? <>
                 <img src={preview} alt="Selected sighting" style={{width:'100%',height:'100%',objectFit:'contain'}} />
-                <p>Selected photograph</p>
             </> : <button type="button" className="photo-picker" onClick={() => fileInputRef.current?.click()}>
                 <span className="photo-picker-icon" aria-hidden="true"><Icon name="camera" size={32}/></span>
                 <strong>Choose a photo</strong>

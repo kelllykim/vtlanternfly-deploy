@@ -96,8 +96,8 @@ def _photo_html(path: Path | None, output_path: Path | None) -> str:
     url = quote(relative.as_posix(), safe="/")
     return (
         f'<img src="{escape(url, quote=True)}" alt="Photograph of sighting" '
-        'style="display:block;width:min(360px,65vw);height:auto;max-height:40vh;'
-        'object-fit:contain;margin-bottom:8px;border-radius:6px" loading="lazy">'
+        'style="display:block;width:auto;height:auto;max-width:min(360px,65vw);max-height:40vh;'
+        'object-fit:contain;border-radius:6px" loading="lazy">'
     )
 
 
@@ -227,15 +227,15 @@ def generate_map(
             image_url = escape(image_urls[photo_key], quote=True)
             photo_image = (
                 f'<img src="{image_url}" alt="Uploaded sighting" '
-                'style="display:block;width:min(360px,65vw);height:auto;max-height:40vh;'
-                'object-fit:contain;margin-bottom:8px;border-radius:6px" loading="lazy">'
+                'style="display:block;width:auto;height:auto;max-width:min(360px,65vw);max-height:40vh;'
+                'object-fit:contain;border-radius:6px" loading="lazy">'
             )
         latitude = float(row["latitude"])
         longitude = float(row["longitude"])
         folium.Marker(
             location=[latitude, longitude],
             tooltip="View photo",
-            popup=folium.Popup(photo_image, max_width=400),
+            popup=folium.Popup(photo_image, max_width=400, min_width=0),
             icon=folium.Icon(color=color, icon="info-sign"),
         ).add_to(cluster)
 
@@ -245,6 +245,19 @@ def generate_map(
             [float(df["latitude"].max()), float(df["longitude"].max())],
         ]
         map_object.fit_bounds(bounds, padding=(25, 25))
+    # Leaflet measures popup content before an uncached photograph has loaded.
+    # Recalculate after loading so each popup fits that photograph's aspect ratio.
+    map_object.get_root().script.add_child(folium.Element(f"""
+    window.addEventListener('load', function() {{
+    {map_object.get_name()}.on('popupopen', function(event) {{
+        const popup = event.popup;
+        const image = popup.getElement().querySelector('img');
+        if (!image) return;
+        if (image.complete) popup.update();
+        else image.addEventListener('load', function() {{ popup.update(); }}, {{ once: true }});
+    }});
+    }});
+    """))
     folium.LayerControl().add_to(map_object)
     return map_object
 
