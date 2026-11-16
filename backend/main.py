@@ -7,12 +7,13 @@ import secrets
 import io
 import re
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import os
 from pathlib import Path
 from uuid import uuid4
 from typing import Literal
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, Response
@@ -213,6 +214,43 @@ def claim_goals(user: User = Depends(get_current_user), db: Session = Depends(ge
     return _user_profile(db, user)
 
 
+def _upload_streak(db: Session, user_id: int, now: datetime | None = None) -> int:
+    return _upload_streaks(db, [user_id], now)[user_id]
+
+
+def _upload_streaks(db: Session, user_ids: list[int], now: datetime | None = None) -> dict[int, int]:
+    """Fetch streak activity together for profile and leaderboard requests."""
+    now = now or datetime.now(timezone.utc)
+    uploads = {user_id: [] for user_id in user_ids}
+    if user_ids:
+        for user_id, uploaded_at in db.execute(select(Report.user_id, Report.created_at).where(
+            Report.user_id.in_(user_ids), Report.review_status == "approved",
+            Report.created_at <= now.astimezone(timezone.utc).replace(tzinfo=None),
+        ).order_by(Report.created_at.desc())):
+            uploads[user_id].append(uploaded_at)
+    return {user_id: _count_upload_streak(dates, now) for user_id, dates in uploads.items()}
+
+
+def _count_upload_streak(uploads: list[datetime], now: datetime) -> int:
+    """Consecutive approved upload days, with today allowed to be in progress."""
+    campus_timezone = ZoneInfo("America/New_York")
+    today = now.astimezone(campus_timezone).date()
+    expected = today
+    streak = 0
+    for uploaded_at in uploads:
+        day = uploaded_at.replace(tzinfo=timezone.utc).astimezone(campus_timezone).date()
+        # Multiple approved photos in one day contribute just one streak day.
+        if day > expected:
+            continue
+        if streak == 0 and day == today - timedelta(days=1):
+            expected = day
+        if day != expected:
+            break
+        streak += 1
+        expected -= timedelta(days=1)
+    return streak
+
+
 def _user_profile(db: Session, user: User) -> dict:
     points = _user_points(db, user.id)
 
@@ -234,7 +272,7 @@ def _user_profile(db: Session, user: User) -> dict:
         "major": user.major,
         "points": points,
         "rank": rank,
-        "streak": 0,  # still need to implement
+        "streak": _upload_streak(db, user.id),
         "reportsTotal": db.scalar(approved),
         "reportsThisWeek": db.scalar(approved.where(Report.created_at >= week_start)),
         "eggFound": bool(db.scalar(approved.where(Report.life_stage_verified == "Egg mass"))),
@@ -326,6 +364,45 @@ def sighting_summary(db: Session = Depends(get_db)):
     }
 
 
+@app.get("/api/me/reports")
+def report_history(offset: int = Query(0, ge=0), limit: int = Query(12, ge=1, le=50),
+                   user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    total = db.scalar(select(func.count(Report.id)).where(Report.user_id == user.id))
+    points = (select(PointEvent.report_id, func.sum(PointEvent.points).label("points"))
+              .where(PointEvent.user_id == user.id).group_by(PointEvent.report_id).subquery())
+    rows = db.execute(select(Report, func.coalesce(points.c.points, 0))
+                      .outerjoin(points, points.c.report_id == Report.id)
+                      .where(Report.user_id == user.id)
+                      .order_by(Report.created_at.desc(), Report.id.desc())
+                      .offset(offset).limit(limit + 1)).all()
+    def timestamp(value):
+        return value.replace(tzinfo=timezone.utc).isoformat() if value else None
+    return {"reports": [{
+        "id": report.id,
+        "reportNumber": total - offset - index,
+        "photoUrl": f"/api/me/reports/{report.id}/photo",
+        "submittedAt": timestamp(report.created_at),
+        "capturedAt": report.captured_at.isoformat() if report.captured_at else None,
+        "status": report.review_status,
+        "detectionStatus": report.detection_status,
+        "lifeStage": report.life_stage_verified,
+        "confidence": float(report.model_confidence) if report.model_confidence is not None else None,
+        "latitude": float(report.lat) if report.lat is not None else None,
+        "longitude": float(report.lng) if report.lng is not None else None,
+        "points": int(awarded),
+    } for index, (report, awarded) in enumerate(rows[:limit])],
+        "nextOffset": offset + limit if len(rows) > limit else None}
+
+
+@app.get("/api/me/reports/{report_id}/photo")
+def report_history_photo(report_id: int, user: User = Depends(get_current_user),
+                         db: Session = Depends(get_db)):
+    report = db.scalar(select(Report).where(Report.id == report_id, Report.user_id == user.id))
+    if report is None:
+        raise HTTPException(status_code=404, detail="Photograph not found")
+    return _photo_preview(report)
+
+
 @app.get("/api/photos/{image_id}")
 def sighting_photo(image_id: str, db: Session = Depends(get_db)):
     """Serve photos only while their approved database report exists."""
@@ -337,6 +414,10 @@ def sighting_photo(image_id: str, db: Session = Depends(get_db)):
     ))
     if report is None:
         raise HTTPException(status_code=404, detail="Photograph not found")
+    return _photo_preview(report)
+
+
+def _photo_preview(report: Report):
     path = UPLOAD_DIR / report.stored_name
     if not path.is_file() or path.parent.resolve() != UPLOAD_DIR.resolve():
         raise HTTPException(status_code=404, detail="Photograph not found")
@@ -716,6 +797,10 @@ def _leaderboard(current: User, segment: str, db: Session):
                             "points": int(total), "sightings": sightings.get(user.id, 0),
                             "major": user.major, "isCurrentUser": user.id == current.id})
     entries.sort(key=lambda entry: (-entry["points"], entry["name"].casefold(), entry["id"]))
+    if segment in {"Friends", "Campus"}:
+        streaks = _upload_streaks(db, [entry["id"] for entry in entries])
+        for entry in entries:
+            entry["streak"] = streaks[entry["id"]]
     previous_points = None
     rank = 0
     for index, entry in enumerate(entries, 1):

@@ -2,7 +2,7 @@
 // Navigation & View Types
 // ==========================================
 export type Tab = 'map' | 'learn' | 'teams' | 'me';
-export type View = Tab | 'capture' | 'verifying' | 'result';
+export type View = Tab | 'capture' | 'verifying' | 'result' | 'history';
 export type Outcome = 'confirmed' | 'native' | 'uncertain';
 
 // =========================================
@@ -30,6 +30,7 @@ export interface UserProfile {
 export type LeaderboardSegment = 'Friends' | 'Teams' | 'Majors' | 'Campus';
 
 export interface LeaderboardEntry {
+    streak?: number;
     major?: string | null;
     sightings: number;
     id: number | string;

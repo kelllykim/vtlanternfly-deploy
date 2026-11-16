@@ -9,6 +9,7 @@ import ResultScreen from './screens/ResultScreen'
 import LearnScreen from './screens/LearnScreen'
 import TeamsScreen from './screens/TeamsScreen'
 import ProfileScreen from './screens/ProfileScreen'
+import HistoryScreen from './screens/HistoryScreen'
 //import WireframePrototype from './screens/WireframePrototype'
 import AuthScreen from './screens/AuthScreen'
 
@@ -154,7 +155,8 @@ export default function App() {
             {view === 'result' && <ResultScreen outcome={outcome} stage={stage} points={pointsAwarded} missingGps={missingGps} duplicate={duplicate} onDone={done} onLearn={resultLearn} onTeam={resultTeam} onRetake={()=>setView('capture')}/>}
             {view === 'learn' && <LearnScreen passedLessons={currentUser.passedLessons} passLesson={passLesson}/>}
             {view === 'teams' && <TeamsScreen userId={currentUser.id}/>}
-            {view === 'me' && <ProfileScreen user={currentUser} onUpdateSettings={handleUpdateSettings}/>}
+            {view === 'me' && <ProfileScreen user={currentUser} onUpdateSettings={handleUpdateSettings} onHistory={() => { setView('history'); window.scrollTo(0, 0) }}/>}
+            {view === 'history' && <HistoryScreen userId={currentUser.id} onBack={() => { setTab('me'); window.scrollTo(0, 0) }}/>}
 
             {(['map','learn','teams','me'] as string[]).includes(view) && <BottomNav tab={tab} setTab={setTab}/>}
         </div>

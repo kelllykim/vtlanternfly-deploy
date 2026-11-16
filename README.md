@@ -13,6 +13,8 @@ sightings, complete learning quizzes, and send friend requests.
 - Friends, Teams, Majors, and Campus rankings with points and approved sighting counts.
 - Friend requests by registered email, with recipient acceptance or decline.
 - Profile contributions, badges, quiz progress, and goal bonuses.
+- Private, paginated report history on the profile, including photo previews,
+  submission dates, identification results, location, and report points.
 - Searchable registration choices from Virginia Tech’s official program list.
 
 ## Local configuration
@@ -117,6 +119,28 @@ The old `backend/sightings.jsonl` index is no longer used by the API. Internet
 access is required for map assets and tiles.
 
 ## Accounts, friends, and goals
+
+The profile day streak counts consecutive calendar days with at least one approved
+lanternfly upload, across all life stages, using Virginia Tech local time
+(`America/New_York`, including daylight saving changes). Multiple photos on one
+day count once. The upload date is used, not the photo's EXIF capture date; GPS
+is not required. Yesterday's streak remains active until today ends. If a full
+day is missed, the streak is 0; the next qualifying upload starts again at 1.
+Rejected photos, detector failures, and duplicate submissions do not extend it.
+Streaks are calculated from existing reports whenever the profile data is loaded,
+so no migration or scheduled reset job is needed. Deleted reports no longer count.
+Friends and Campus leaderboards show this same day streak beside each person's name.
+
+Press **My History** on the profile to open a separate page listing the signed-in
+account's saved reports, newest first, in pages of 12. Use the back button to return
+to the profile. Expand a card for identification confidence, capture date,
+and map eligibility. Report numbers count only the account's current saved reports,
+starting at 1 for the oldest, so deleted reports leave no gaps in the displayed numbers.
+Select a photo to open a larger preview. Missing photo
+files display a fallback. Reports without GPS and rejected reports are included.
+Detector failures are not currently saved as reports and therefore do not appear.
+Report points exclude separate goal and quiz bonuses. History and its photo
+endpoint require a valid session and only return the account's own reports.
 
 Login and registration issue an HttpOnly, SameSite=Lax session cookie. MySQL stores
 only a SHA-256 hash of the random token. Logout revokes the session; expired sessions

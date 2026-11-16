@@ -3,7 +3,7 @@ import Icon from '../components/Icon';
 import type { UserProfile } from '../types.tsx';
 import '../styles/features.css';
 
-export default function ProfileScreen({ user, onUpdateSettings }: { user: UserProfile; onUpdateSettings: (key: string, val: boolean) => void }) {
+export default function ProfileScreen({ user, onUpdateSettings, onHistory }: { user: UserProfile; onUpdateSettings: (key: string, val: boolean) => void; onHistory: () => void }) {
     const hasBadge = user.passedLessons.length === 3
     const badgeList: [string, string, boolean][] = [
         ['Field Expert', 'trophy', hasBadge || user.badges.includes('Field Expert')],
@@ -39,6 +39,7 @@ export default function ProfileScreen({ user, onUpdateSettings }: { user: UserPr
                 </div>
             </div>
         </section>
+        <p className="streak-explanation">Upload an AI-detected lanternfly each day to grow your streak. Any life stage counts, once per day. Missing a full day resets it to 0. Days follow Virginia Tech local time.</p>
         <div className="section-title">
             <div>
                 <small>ACHIEVEMENTS</small>
@@ -68,6 +69,10 @@ export default function ProfileScreen({ user, onUpdateSettings }: { user: UserPr
             <div><span>✣</span><b>{user.reportsByStage.nymph}</b><small>Nymphs</small></div>
             <div><span>≋</span><b>{user.reportsByStage.eggMass}</b><small>Egg masses</small></div>
         </section>
+        <button type="button" className="history-link" onClick={onHistory}>
+            <span><strong>My History</strong><small>Press to view my history</small></span>
+            <span aria-hidden="true">→</span>
+        </button>
         <div className="section-title">
             <div><small>EARN 10 POINTS EACH</small>
                 <h2>Goals</h2>

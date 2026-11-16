@@ -117,7 +117,13 @@ export default function Teams({ userId }: { userId: number }) {
                     <span className={`rank rank-${i}`}>{team.rank}</span>
                     <div className="rank-identity"><span className="team-avatar">{team.name[0]}</span>
                     <div>
-                        <b>{team.name}</b>
+                        <span className="leaderboard-name"><b>{team.name}</b>
+                            {(segment === 'Friends' || segment === 'Campus') && team.streak !== undefined &&
+                                <span className={`leaderboard-streak${team.streak === 0 ? ' inactive' : ''}`}
+                                    title={`${team.streak}-day upload streak`} aria-label={`${team.streak}-day upload streak`}>
+                                    <Icon name="flame" size={13}/>{team.streak}
+                                </span>}
+                        </span>
                         <small>{team.major?.trim() || (team.isCurrentUser ? (segment === 'Teams' ? 'Your team' : segment === 'Majors' ? 'Your major' : 'You') : (segment === 'Teams' ? 'Campus team' : segment === 'Majors' ? 'Major' : 'Campus member'))}</small>
                     </div>
                     </div>

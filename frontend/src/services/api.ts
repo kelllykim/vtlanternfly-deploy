@@ -153,3 +153,22 @@ export const respondToFriendRequest = (requesterId: number, action: 'accept' | '
 
 export const getMajors = () =>
     sendJson<string[]>('/api/majors', 'GET', 'Could not load the major choices. Please try again.')
+
+export type ReportHistoryItem = {
+  id: number
+  reportNumber: number
+  photoUrl: string
+  submittedAt: string
+  capturedAt: string | null
+  status: 'approved' | 'rejected' | 'pending'
+  detectionStatus: string | null
+  lifeStage: string | null
+  confidence: number | null
+  latitude: number | null
+  longitude: number | null
+  points: number
+}
+
+export const getReportHistory = (offset = 0) =>
+    sendJson<{ reports: ReportHistoryItem[]; nextOffset: number | null }>(
+      `/api/me/reports?offset=${offset}`, 'GET', 'Could not load your reports. Please try again.')
