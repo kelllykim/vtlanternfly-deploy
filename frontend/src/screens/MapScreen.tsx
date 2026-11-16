@@ -7,6 +7,15 @@ export default function MapScreen({ onReport }: { onReport: () => void }) {
     const [summary, setSummary] = useState<{ uploaded: number; detected: number; mapped: number } | null>(null)
     const [mapVersion, setMapVersion] = useState(0)
     const [mapError, setMapError] = useState(false)
+    const [expanded, setExpanded] = useState(false)
+
+    // close the expanded map with the Escape key
+    useEffect(() => {
+        if (!expanded) return
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setExpanded(false) }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [expanded])
 
     const refreshMap = () => {
         setMapError(false)
@@ -24,12 +33,17 @@ export default function MapScreen({ onReport }: { onReport: () => void }) {
 
     return <main className="screen map-screen">
         <Header title="Campus sightings" eyebrow="VT LANTERNFLY" />
-        <section className="map-card" aria-label="Interactive spotted lanternfly sighting map">
+        <section className={`map-card${expanded ? ' is-expanded' : ''}`} aria-label="Interactive spotted lanternfly sighting map">
             <div className="map-toolbar">
                 <div><strong>Lanternfly sightings</strong><span>Automatically approved sightings</span></div>
-                <button onClick={refreshMap} aria-label="Refresh map">Refresh ↻</button>
+                <div style={{display:'flex',gap:6}}>
+                    <button className="map-expand-button" onClick={() => setExpanded(value => !value)} aria-expanded={expanded}>
+                        {expanded ? 'Close ⤡' : 'Expand ⤢'}
+                    </button>
+                    <button onClick={refreshMap} aria-label="Refresh map">Refresh ↻</button>
+                </div>
             </div>
-            <div style={{height:400,background:'#e5efe5',position:'relative'}}>
+            <div style={{background:'#e5efe5',position:'relative'}}>
                 <iframe
                     key={mapVersion}
                     src="/api/map"
