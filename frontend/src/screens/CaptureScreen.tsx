@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from "react";
 import {uploadPhoto, UploadResponse} from "@/services/api.ts";
 import Icon from '../components/Icon';
+import VerifyingScreen from './VerifyingScreen';
 import '../styles/capture.css';
 
 export default function Capture({ onBack, onSuccess }: { onBack: () => void; onSuccess: (res: UploadResponse) => void }) {
@@ -41,6 +42,8 @@ export default function Capture({ onBack, onSuccess }: { onBack: () => void; onS
             fileInputRef.current.click()
         }
     }
+
+    if (uploading) return <VerifyingScreen />
 
     return <main className="capture-screen">
         <div className="camera-top">

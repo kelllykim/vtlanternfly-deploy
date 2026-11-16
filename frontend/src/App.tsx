@@ -4,7 +4,6 @@ import BottomNav from './components/BottomNav'
 import { LogoutContext } from './components/AccountMenu'
 import MapScreen from './screens/MapScreen'
 import CaptureScreen from './screens/CaptureScreen'
-import VerifyingScreen from './screens/VerifyingScreen'
 import ResultScreen from './screens/ResultScreen'
 import LearnScreen from './screens/LearnScreen'
 import TeamsScreen from './screens/TeamsScreen'
@@ -69,13 +68,6 @@ export default function App() {
     const user = await claimGoalRewards(key, period)
     if (sessionVersion.current === version) setCurrentUser(user)
   }
-
-  // auto-advance verifying screen after 2 seconds
-  useEffect(() => {
-    if (view !== 'verifying') return;
-    const id = window.setTimeout(() => setView('result'), 2000);
-    return () => clearTimeout(id);
-  }, [view])
 
   const setTab = (t: Tab) => { setTabState(t); setView(t) }
 
@@ -154,10 +146,9 @@ export default function App() {
                   } else {
                     setOutcome('uncertain')
                   }
-                  setView('verifying')
+                  setView('result')
               }}
           />}
-            {view === 'verifying' && <VerifyingScreen onBack={()=>setView('capture')}/>}
             {view === 'result' && <ResultScreen outcome={outcome} stage={stage} points={pointsAwarded} missingGps={missingGps} duplicate={duplicate} onDone={done} onLearn={resultLearn} onTeam={resultTeam} onRetake={()=>setView('capture')}/>}
             {view === 'learn' && <LearnScreen passedLessons={currentUser.passedLessons} passLesson={passLesson}/>}
             {view === 'teams' && <TeamsScreen userId={currentUser.id}/>}
