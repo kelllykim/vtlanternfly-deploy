@@ -796,6 +796,24 @@
     color: #aaaeab;
 }
 
+.badge-grid .streak-badge.tier-1 > div {
+    background: #ffffff;
+    color: #861f41;
+    border: 1px solid #b7b7b7;
+}
+
+.badge-grid .streak-badge.tier-2 > div {
+    background: #e5751f;
+    color: #202427;
+    border: 1px solid #e5751f;
+}
+
+.badge-grid .streak-badge.tier-3 > div {
+    background: #861f41;
+    color: #ffffff;
+    border: 1px solid #861f41;
+}
+
 .badge-grid b,
 .badge-grid small {
     display: block;

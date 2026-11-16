@@ -15,6 +15,7 @@ export interface UserProfile {
     points: number;
     rank: number;
     streak: number;
+    streakBadgeTier: number;
     reportsTotal: number;
     reportsThisWeek: number;
     reportsByStage: { adult: number; nymph: number; eggMass: number };

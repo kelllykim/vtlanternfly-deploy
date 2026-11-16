@@ -27,10 +27,10 @@ export default function PlayerProfile({ userId, onBack }: { userId: number; onBa
                         <div><b>{profile.streak}</b><span>Day streak</span></div>
                     </div>
                 </section>
-                <div className="section-title"><div><small>ACHIEVEMENTS</small><h2>Unlocked badges</h2></div><span>{profile.badges.length} earned</span></div>
-                {profile.badges.length ? <div className="badge-grid">{profile.badges.map(badge => <article className="earned" key={badge}>
+                <div className="section-title"><div><small>ACHIEVEMENTS</small><h2>Unlocked badges</h2></div>{!profile.badgesPrivate && <span>{profile.badges.length} earned</span>}</div>
+                {profile.badgesPrivate ? <p>This player’s badges are private.</p> : profile.badges.length ? <div className="badge-grid">{profile.badges.map(badge => <article className={`earned${badge === 'On a Roll' ? ` streak-badge tier-${profile.streakBadgeTier}` : ''}`} key={badge}>
                     <div><Icon name={badge === 'Major Mate' ? 'users' : badge === 'On a Roll' ? 'flame' : badge === 'First Squash' ? 'check' : 'trophy'} /></div>
-                    <b>{badge}</b><small>Earned</small>
+                    <b>{badge}</b><small>{badge === 'On a Roll' ? `${profile.streakBadgeTier}-day streak` : 'Earned'}</small>
                 </article>)}</div> : <p>No badges unlocked yet.</p>}
             </>}
     </main>

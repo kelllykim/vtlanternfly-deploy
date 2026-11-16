@@ -40,7 +40,8 @@ export default function ProfileScreen({ user, onUpdateSettings, onHistory, onCla
                     {user.streak}
                 </span>
             </div>
-            <h2>{user.anonymous ? 'Anonymous Hokie' : user.displayName}</h2>
+            <h2>{user.displayName}</h2>
+            {user.anonymous && <p role="status">You appear as Anonymous Hokie on leaderboards. Only you can see your badges.</p>}
             <p>{user.major ? user.major : 'Virginia Tech Student'}</p>
 
             <div className="profile-stats">
@@ -60,7 +61,7 @@ export default function ProfileScreen({ user, onUpdateSettings, onHistory, onCla
             <div>
                 <small>ACHIEVEMENTS</small>
                 <h2>Badges</h2></div><span>{earnedCount} of {badgeList.length}</span></div>
-        <div className="badge-grid">{badgeList.map(([n,ic,on]) => <article className={on ? 'earned':'locked'} key={String(n)}><div><Icon name={String(ic)}/></div><b>{n}</b><small>{on ? 'Earned' : 'Locked'}</small>{n === 'Field Expert' && <small>Pass all three field guide quizzes.</small>}{n === 'First Squash' && <small>Submit your first approved lanternfly sighting.</small>}{n === 'On a Roll' && <small>Upload an approved lanternfly sighting on three consecutive days.</small>}{n === 'Major Mate' && <small>Add one friend in your major. Their request must be accepted.</small>}</article>)}</div>
+        <div className="badge-grid">{badgeList.map(([n,ic,on]) => <article className={`${on ? 'earned' : 'locked'}${n === 'On a Roll' ? ` streak-badge tier-${user.streakBadgeTier}` : ''}`} key={String(n)}><div><Icon name={String(ic)}/></div><b>{n}</b><small>{n === 'On a Roll' && user.streakBadgeTier > 0 ? `${user.streakBadgeTier}-day streak` : on ? 'Earned' : 'Locked'}</small>{n === 'Field Expert' && <small>Pass all three field guide quizzes.</small>}{n === 'First Squash' && <small>Submit your first approved lanternfly sighting.</small>}{n === 'On a Roll' && <small>Upload on consecutive days: 1 for white, 2 for burnt orange, 3 for maroon. Approved sightings only.</small>}{n === 'Major Mate' && <small>Add one friend in your major. Their request must be accepted.</small>}</article>)}</div>
         <section className="learn-progress-card">
             <div>
                 <small>LEARN PROGRESS</small>
@@ -114,7 +115,7 @@ export default function ProfileScreen({ user, onUpdateSettings, onHistory, onCla
         <div className="section-title">
             <div><small>SETTINGS</small><h2>Privacy</h2></div></div>
         <section className="settings"><label><div><b>Appear anonymous</b>
-            <small>On public leaderboards</small></div><input type="checkbox" checked={user.anonymous} onChange={e=>onUpdateSettings('anonymous', e.target.checked)}/><i/></label><label>
+            <small>Hide your name on leaderboards and keep badges private</small></div><input type="checkbox" checked={user.anonymous} onChange={e=>onUpdateSettings('anonymous', e.target.checked)}/><i/></label><label>
             <div>
                 <b>Share data with VT researchers</b><small>Helps improve campus response</small>
             </div><input type="checkbox" checked={user.shareWithResearchers} onChange={e=>onUpdateSettings('shareWithResearchers', e.target.checked)}/><i/></label>

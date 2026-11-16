@@ -285,6 +285,7 @@ def _user_profile(db: Session, user: User) -> dict:
         "points": points,
         "rank": rank,
         "streak": _upload_streak(db, user.id),
+        "streakBadgeTier": _user_streak_badge_tier(db, user.id),
         "reportsTotal": db.scalar(approved),
         "reportsThisWeek": db.scalar(approved.where(Report.created_at >= week_start)),
         "eggFound": bool(db.scalar(approved.where(Report.life_stage_verified == "Egg mass"))),
@@ -481,18 +482,27 @@ BADGE_RULES = {  # badge name -> minimum verified reports
 }
 
 
-def _has_three_day_streak(uploads) -> bool:
+def _streak_badge_tier(uploads) -> int:
     """A past qualifying streak remains an achievement after the current streak ends."""
     campus_timezone = ZoneInfo("America/New_York")
     days = sorted({date.replace(tzinfo=timezone.utc).astimezone(campus_timezone).date() for date in uploads})
     consecutive = 0
+    best = 0
     previous = None
     for day in days:
         consecutive = consecutive + 1 if previous is not None and day == previous + timedelta(days=1) else 1
-        if consecutive >= 3:
-            return True
+        best = max(best, consecutive)
+        if best >= 3:
+            return 3
         previous = day
-    return False
+    return best
+
+
+def _user_streak_badge_tier(db: Session, user_id: int) -> int:
+    return _streak_badge_tier(db.scalars(select(Report.created_at).where(
+        Report.user_id == user_id, Report.review_status == "approved",
+        Report.created_at <= datetime.now(timezone.utc).replace(tzinfo=None),
+    )))
 
 
 def _earned_badge_names(db: Session, user_id: int) -> set[str]:
@@ -509,11 +519,7 @@ def _earned_badge_names(db: Session, user_id: int) -> set[str]:
     quizzes = db.scalar(select(func.count()).select_from(QuizPass).where(QuizPass.user_id == user_id))
 
     earned = {name for name, needed in BADGE_RULES.items() if total >= needed}
-    uploaded_at = db.scalars(select(Report.created_at).where(
-        Report.user_id == user_id, Report.review_status == "approved",
-        Report.created_at <= datetime.now(timezone.utc).replace(tzinfo=None),
-    ))
-    if _has_three_day_streak(uploaded_at):
+    if _user_streak_badge_tier(db, user_id) >= 1:
         earned.add("On a Roll")
     if stages & {"Black nymph", "Red nymph"}:
         earned.add("Nymph Spotter")
@@ -552,7 +558,7 @@ def _award_badges(db: Session, user_id: int) -> None:
     earned = _earned_badge_names(db, user_id)
     for name, description, icon in [
         ("Major Mate", "Add one accepted friend who shares your major.", "users"),
-        ("On a Roll", "Upload an approved lanternfly sighting on three consecutive days.", "flame"),
+        ("On a Roll", "Earn white, burnt orange, and maroon tiers with one, two, and three consecutive upload days.", "flame"),
     ]:
         if name in earned and db.scalar(select(Badge.id).where(Badge.name == name)) is None:
             try:
@@ -904,12 +910,15 @@ def _get_user_or_404(db: Session, user_id: int) -> User:
 @app.get("/api/users/{user_id}/public-profile")
 def public_profile(user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     user = _get_user_or_404(db, user_id)
+    badges_private = user.anonymous and user.id != current_user.id
     return {
         "displayName": "Anonymous Hokie" if user.anonymous else user.display_name,
         "major": user.major,
         "points": _user_points(db, user.id),
         "streak": _upload_streak(db, user.id),
-        "badges": _profile_badges(db, user.id),
+        "streakBadgeTier": None if badges_private else _user_streak_badge_tier(db, user.id),
+        "badges": [] if badges_private else _profile_badges(db, user.id),
+        "badgesPrivate": badges_private,
     }
 
 
