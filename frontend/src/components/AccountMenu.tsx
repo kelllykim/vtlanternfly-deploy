@@ -33,7 +33,7 @@ export default function AccountMenu() {
     }}>
         <button ref={trigger} type="button" className="header-mark" aria-label="Account options"
             aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(value => !value)}>
-            <span>VT</span>
+            <img src="/lanternfly-logo.svg" alt="VT Lanternfly" width={74} height={74} />
         </button>
         {open && <div className="account-menu-panel" id={panelId}>
             <button type="button" onClick={() => { setOpen(false); logout() }}>Log out</button>
