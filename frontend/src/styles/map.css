@@ -270,3 +270,131 @@
         height: 300px;
     }
 }
+
+/* =========================================================================
+   Map screen: fit everything in one screen (phones and desktop), no scrolling
+   -------------------------------------------------------------------------
+   The screen is exactly the viewport height. The map grows or shrinks to fill
+   whatever space is left, so the Report button always sits just above the
+   bottom nav. Rules are scoped to .map-screen so they win over the duplicate
+   map styles in index.css (which loads after this file).
+   ========================================================================= */
+.map-screen {
+    height: 100vh;               /* fallback for older browsers */
+    height: 100dvh;              /* phones: excludes the browser's address bar */
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(150px, 1fr) auto auto auto;
+    row-gap: 10px;
+    /* room for the fixed bottom nav (84px) plus the iPhone home bar */
+    padding-bottom: calc(84px + 12px + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;            /* safety net on very small screens only */
+}
+
+.map-screen .page-header {
+    height: auto;
+    padding: 14px 0 6px;
+    margin-bottom: 0;
+}
+
+/* Map card fills the leftover space */
+.map-screen .map-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.map-screen .map-toolbar {
+    height: auto;
+    padding: 10px 14px;
+    flex: 0 0 auto;
+}
+
+/* The map area (its height is set inline in MapScreen.tsx, hence !important) */
+.map-screen .map-card > div:not(.map-toolbar) {
+    flex: 1 1 auto;
+    height: auto !important;
+    min-height: 0;
+}
+
+.map-screen .privacy-note {
+    height: auto;
+    padding: 6px 12px;
+    flex: 0 0 auto;
+    text-align: center;
+}
+
+.map-screen .stats-card {
+    margin-top: 0;
+    padding: 10px 14px;
+}
+
+.map-screen .stats-card strong {
+    font-size: 16px;
+}
+
+.map-screen .tip-card {
+    margin-top: 0;
+    padding: 10px 12px;
+    align-items: center;
+}
+
+.map-screen .tip-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+}
+
+.map-screen .report-button {
+    margin-top: 0;
+    min-height: 52px;
+}
+
+/* Wider screens (tablets, laptops): stats and tip side by side */
+@media (min-width: 640px) {
+    .map-screen {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-rows: auto minmax(220px, 1fr) auto auto;
+        column-gap: 12px;
+        row-gap: 12px;
+    }
+    .map-screen .page-header,
+    .map-screen .map-card,
+    .map-screen .report-button {
+        grid-column: 1 / -1;
+    }
+}
+
+/* Short screens (small phones, landscape): hide the tip to give the map room */
+@media (max-height: 640px) {
+    .map-screen {
+        grid-template-rows: auto minmax(130px, 1fr) auto auto;
+        row-gap: 8px;
+    }
+    .map-screen .tip-card {
+        display: none;
+    }
+    .map-screen .page-header {
+        padding: 10px 0 4px;
+    }
+}
+
+/* Very short screens (phones turned sideways): keep only map + button */
+@media (max-height: 440px) {
+    .map-screen {
+        grid-template-rows: auto minmax(120px, 1fr) auto;
+        padding-bottom: calc(84px + 8px + env(safe-area-inset-bottom, 0px));
+    }
+    .map-screen .stats-card,
+    .map-screen .privacy-note {
+        display: none;
+    }
+    .map-screen .map-toolbar {
+        padding: 6px 12px;
+    }
+    .map-screen .page-header h1 {
+        font-size: 17px;
+    }
+}
