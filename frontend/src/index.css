@@ -71,6 +71,12 @@ input:focus-visible + i {
     gap: 12px;
 }
 
+.page-header-text {
+    margin-left: 12px;
+    min-width: 0;
+    transform: translateY(-24px);
+}
+
 .page-header h1 {
     font-family: Manrope, sans-serif;
     font-size: 21px;
