@@ -7,6 +7,7 @@ import secrets
 import io
 import re
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from zoneinfo import ZoneInfo
 import os
 from pathlib import Path
@@ -167,20 +168,30 @@ def _user_points(db: Session, user_id: int) -> int:
     )
 
 
+class GoalKey(str, Enum):
+    REPORT_3 = "report_3"
+    GPS_SIGHTING = "gps_sighting"
+    QUIZ = "quiz"
+    FRIEND = "invite"
+
+
 def _goal_progress(db: Session, user_id: int) -> list[dict]:
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     approved = select(func.count(Report.id)).where(Report.user_id == user_id, Report.review_status == "approved")
     rewards = {(r.goal_key, r.period_key) for r in db.scalars(select(GoalReward).where(GoalReward.user_id == user_id))}
     definitions = [
-        ("report_3", "Report 3 verified lanternflies this week", 3,
+        (GoalKey.REPORT_3.value, "Report 3 verified lanternflies this week", 3,
          db.scalar(approved.where(Report.created_at >= week_start)), week_start.date().isoformat()),
-        ("egg_mass", "Find 1 verified egg mass", 1,
-         db.scalar(approved.where(Report.life_stage_verified == "Egg mass")), "all-time"),
-        ("quiz", "Complete a Learn quiz", 1,
+        (GoalKey.GPS_SIGHTING.value, "Submit an approved sighting with GPS data", 1,
+         db.scalar(approved.where(Report.lat.is_not(None), Report.lng.is_not(None))), "all-time"),
+        (GoalKey.QUIZ.value, "Complete a Learn quiz", 1,
          db.scalar(select(func.count()).select_from(QuizPass).where(QuizPass.user_id == user_id)), "all-time"),
-        ("invite", "Invite 1 friend", 1,
-         db.scalar(select(func.count(User.id)).where(User.invited_by == user_id)), "all-time"),
+        (GoalKey.FRIEND.value, "Add 1 friend", 1,
+         db.scalar(select(func.count()).select_from(Friendship).where(
+             (Friendship.requester_id == user_id) | (Friendship.addressee_id == user_id),
+             Friendship.status == "accepted",
+         )), "all-time"),
     ]
     return [{"key": key, "label": label, "current": min(count, target), "target": target,
              "completed": count >= target, "rewarded": (key, period) in rewards,
@@ -215,7 +226,7 @@ def _award_goal_rewards(db: Session, user_id: int, goal_key: str, period: str) -
 
 
 class GoalClaim(BaseModel):
-    goal_key: Literal["report_3", "egg_mass", "quiz", "invite"]
+    goal_key: GoalKey
     period: str = Field(max_length=10)
 
 
