@@ -1,12 +1,29 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Header from '../components/Header'
 import Icon from '../components/Icon'
 import { appLessons, lanternflyStages } from '../types'
+import lanternflyImage from '../assets/learn/lanternfly.jpg'
+import tigerMothImage from '../assets/learn/tiger-moth.jpg'
+import treeOfHeavenImage from '../assets/learn/tree-of-heaven.jpg'
+import blackWalnutImage from '../assets/learn/black-walnut-tree.jpg'
+import mapleImage from '../assets/learn/red-maple.jpg'
+
+const hostTrees = [
+    { name: 'Tree of Heaven', description: 'Crushed leaves smell like burnt peanut butter. Smooth leaf edges.', image: treeOfHeavenImage },
+    { name: 'Black Walnut', description: 'Dark, deeply furrowed bark and long compound leaves.', image: blackWalnutImage },
+    { name: 'Maple', description: 'Opposite branches with familiar pointed, lobed leaves.', image: mapleImage },
+]
 
 export default function Learn({ passedLessons, passLesson }: { passedLessons: number[]; passLesson: (lesson: number) => void }) {
     const [lesson, setLesson] = useState<number | null>(null)
     const [q, setQ] = useState(0)
     const [answers, setAnswers] = useState<number[]>([])
+    const [selectedTree, setSelectedTree] = useState<(typeof hostTrees)[number] | null>(null)
+    const treeDialog = useRef<HTMLDialogElement>(null)
+
+    useEffect(() => {
+        if (selectedTree) treeDialog.current?.showModal()
+    }, [selectedTree])
 
     const active = lesson === null ? null : appLessons[lesson]
     const score = active ? answers.filter((a, i) => a === active.questions[i]?.correctAnswerIndex).length : 0
@@ -73,15 +90,22 @@ export default function Learn({ passedLessons, passLesson }: { passedLessons: nu
             </div>
             <div className="section-title"><div><small>WHERE TO LOOK</small><h2>Host trees</h2></div></div>
             <div className="host-list">
-                {[['Tree of Heaven','Crushed leaves smell like burnt peanut butter. Smooth leaf edges.'],['Black walnut','Dark, deeply furrowed bark and long compound leaves.'],['Maple','Opposite branches with familiar pointed, lobed leaves.']].map(([n,d]) => (
-                    <article key={n}><span className="leaf-shape">♣</span><div><h3>{n}</h3><p>{d}</p></div><Icon name="chevron"/></article>
+                {hostTrees.map(tree => (
+                    <article key={tree.name}><img className="host-photo" src={tree.image} alt={tree.name} loading="lazy"/><div><h3>{tree.name}</h3><p>{tree.description}</p></div><button className="host-details-button" aria-label={`Learn why lanternflies feed on ${tree.name}`} onClick={() => setSelectedTree(tree)}><Icon name="chevron"/></button></article>
                 ))}
             </div>
+            <dialog ref={treeDialog} className="host-tree-dialog" aria-labelledby="host-tree-title" onClose={() => setSelectedTree(null)} onClick={event => { if (event.target === event.currentTarget) treeDialog.current?.close() }}>
+                {selectedTree && <div className="host-tree-detail">
+                    <form method="dialog"><button className="host-dialog-close" aria-label="Close tree details" autoFocus>Close</button></form>
+                    <img src={selectedTree.image} alt={selectedTree.name}/>
+                    <h2 id="host-tree-title">{selectedTree.name}</h2>
+                </div>}
+            </dialog>
             <section id="lookalikes" className="lookalikes">
                 <small>COMPARE</small><h2>Lanternfly or look-alike?</h2>
                 <div className="compare">
-                    <div><span className="compare-bug">◆</span><b>Lanternfly</b><p>Spotted gray wings, red beneath</p></div>
-                    <div><span className="compare-bug">◉</span><b>Native moth</b><p>Soft scaled wings, no red flash</p></div>
+                    <div><img className="compare-photo" src={lanternflyImage} alt="Adult spotted lanternfly" loading="lazy"/><b>Lanternfly</b><p>Spotted gray wings, red beneath</p></div>
+                    <div><img className="compare-photo" src={tigerMothImage} alt="Tiger moth" loading="lazy"/><b>Tiger Moth</b><p>Soft scaled wings with bold patterns</p></div>
                 </div>
                 <p className="protect-note">When in doubt, report first and leave it alone.</p>
             </section>
