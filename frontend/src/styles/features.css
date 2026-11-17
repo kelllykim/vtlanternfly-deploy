@@ -1577,3 +1577,22 @@
 .wf-goal small {
     font-size: 8px;
 }
+
+/* Life stage photos in the Learn tab */
+.stage-card .stage-art {
+    overflow: hidden;
+    background: #e2dfd2;
+}
+
+.stage-card .stage-photo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+}
+
+.stage-card .stage-art span {
+    z-index: 1;                  /* keep the months label on top of the photo */
+}

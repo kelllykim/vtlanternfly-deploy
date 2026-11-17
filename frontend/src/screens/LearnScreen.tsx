@@ -60,10 +60,10 @@ export default function Learn({ passedLessons, passLesson }: { passedLessons: nu
             </section>
             <div className="section-title"><div><small>IDENTIFICATION</small><h2>Life stages</h2></div><span>Swipe to explore</span></div>
             <div className="stage-scroll">
-                {lanternflyStages.map((stage, i) => (
+                {lanternflyStages.map(stage => (
                     <article className="stage-card" key={stage.name}>
                         <div className="stage-art">
-                            <div className="stage-symbol">{i === 0 ? '≋' : i === 1 ? '••' : i === 2 ? '✣' : '◆'}</div>
+                            <img className="stage-photo" src={stage.image} alt={`Spotted lanternfly ${stage.name.toLowerCase()}`} loading="lazy" />
                             <span>{stage.activeMonths}</span>
                         </div>
                         <h3>{stage.name}</h3>

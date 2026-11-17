@@ -1,3 +1,8 @@
+import eggMassImg from './assets/stages/egg-mass.jpg';
+import blackNymphImg from './assets/stages/black-nymph.jpg';
+import redNymphImg from './assets/stages/red-nymph.jpg';
+import adultImg from './assets/stages/adult.jpg';
+
 // ==========================================
 // Navigation & View Types
 // ==========================================
@@ -51,6 +56,7 @@ export interface LifeStage {
     name: string;
     activeMonths: string;
     description: string;
+    image: string;
 }
 
 // Represents a single question inside a learning quiz
@@ -79,10 +85,10 @@ export interface LeaderboardTeam {
 // ==========================================
 
 export const lanternflyStages: LifeStage[] = [
-    { name: 'Egg mass', activeMonths: 'Sep–Jun', description: 'Gray, mud-like patches laid in rows on smooth outdoor surfaces.' },
-    { name: 'Black nymph', activeMonths: 'Apr–Jul', description: 'Tiny black body with bright white spots; quick and wingless.' },
-    { name: 'Red nymph', activeMonths: 'Jul–Sep', description: 'Vivid red with black bands and white dots before adulthood.' },
-    { name: 'Adult', activeMonths: 'Jul–Dec', description: 'Gray spotted forewings hide striking red-and-black hindwings.' },
+    { name: 'Egg mass', activeMonths: 'Sep–Jun', description: 'Gray, mud-like patches laid in rows on smooth outdoor surfaces.', image: eggMassImg },
+    { name: 'Black nymph', activeMonths: 'Apr–Jul', description: 'Tiny black body with bright white spots; quick and wingless.', image: blackNymphImg },
+    { name: 'Red nymph', activeMonths: 'Jul–Sep', description: 'Vivid red with black bands and white dots before adulthood.', image: redNymphImg },
+    { name: 'Adult', activeMonths: 'Jul–Dec', description: 'Gray spotted forewings hide striking red-and-black hindwings.', image: adultImg },
 ];
 
 export const appLessons: Lesson[] = [
